@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useCallback, useEffect } from "react";
+import { useState, useMemo, useRef, useCallback, useEffect } from "react";
 import {
   fetchTudo,
   dbCriarCrianca, dbAtualizarCrianca, dbExcluirCrianca, dbAtualizarStatusCrianca,
@@ -7,31 +7,6 @@ import {
   dbCriarSala, dbAtualizarSala, dbExcluirSala,
   dbCriarAula, dbExcluirAula,
 } from "./db";
-
-const initialResponsaveis = [
-  { id: 1, nome: "Marina Andrade", tipo: "mãe", tipoDocumento: "CPF", documento: "123.456.789-00", telefone: "(11) 98888-0001", email: "marina@email.com", dataNascimento: "1990-05-10", sexo: "Mulher", observacoes: "", foto: "" },
-  { id: 2, nome: "Carlos Ribeiro", tipo: "pai", tipoDocumento: "CNH", documento: "98765432100", telefone: "(11) 98888-0002", email: "", dataNascimento: "1985-11-22", sexo: "Homem", observacoes: "", foto: "" },
-  { id: 3, nome: "Patrícia Costa", tipo: "mãe", tipoDocumento: "CPF", documento: "111.222.333-44", telefone: "(11) 98888-0003", email: "", dataNascimento: "1988-03-17", sexo: "Mulher", observacoes: "", foto: "" },
-];
-
-const initialCriancas = [
-  { id: 1, codigo: "KID-0001", nome: "Lucas Andrade", nascimento: "2021-03-12", turma: "Maternal", responsaveisIds: [1], alergia: "Nenhuma", sala: null, status: "fora", foto: "" },
-  { id: 2, codigo: "KID-0002", nome: "Sofia Ribeiro", nascimento: "2019-07-02", turma: "Jardim", responsaveisIds: [2], alergia: "Amendoim", sala: null, status: "fora", foto: "" },
-  { id: 3, codigo: "KID-0003", nome: "Davi Souza", nascimento: "2017-11-20", turma: "Juniores", responsaveisIds: [1], alergia: "Nenhuma", sala: null, status: "fora", foto: "" },
-  { id: 4, codigo: "KID-0004", nome: "Helena Costa", nascimento: "2022-01-15", turma: "Berçário", responsaveisIds: [3], alergia: "Lactose", sala: null, status: "fora", foto: "" },
-];
-
-const initialSalas = [
-  { id: 1, nome: "Berçário", idadeInicial: 0, idadeFinal: 1, capacidade: 8, observacoes: "" },
-  { id: 2, nome: "Maternal", idadeInicial: 2, idadeFinal: 3, capacidade: 12, observacoes: "" },
-  { id: 3, nome: "Jardim", idadeInicial: 4, idadeFinal: 6, capacidade: 15, observacoes: "" },
-  { id: 4, nome: "Juniores", idadeInicial: 7, idadeFinal: 10, capacidade: 20, observacoes: "" },
-];
-
-const initialProfessores = [
-  { id: 1, nome: "Ana Paula Lima", telefone: "(11) 99999-0001", email: "ana@igreja.com", observacoes: "", foto: "" },
-  { id: 2, nome: "Roberto Ferreira", telefone: "(11) 99999-0002", email: "roberto@igreja.com", observacoes: "", foto: "" },
-];
 
 // ---------- FOTO CAPTURA ----------
 
@@ -162,9 +137,9 @@ function Pill({ children, tone = "neutral" }) {
   );
 }
 
-function Card({ children, style }) {
+function Card({ children, style, onClick }) {
   return (
-    <div style={{ background: "#fffdf8", border: "1px solid #e3dcc8", borderRadius: 12, padding: 16, ...style }}>
+    <div onClick={onClick} style={{ background: "#fffdf8", border: "1px solid #e3dcc8", borderRadius: 12, padding: 16, ...style }}>
       {children}
     </div>
   );
@@ -555,7 +530,6 @@ function ModalCrianca({ inicial, responsaveis, salas, onSalvar, onFechar }) {
   const [salvando, setSalvando] = useState(false);
 
   const turmasSugeridas = form.nascimento ? calcularTurmasSugeridas(form.nascimento, salas || []) : [];
-  const turmaSugeridaLabel = turmasSugeridas.length > 0 ? turmasSugeridas.join(" ou ") : "—";
   const idadeExibida = calcularIdade(form.nascimento);
 
   const erros = {
@@ -1080,21 +1054,66 @@ function TelaRelatorios({ criancas }) {
 
 // ---------- APP DOS PAIS ----------
 
-function AppPais({ criancas, setCriancas, eventoAtivo }) {
-  const meusFilhos = criancas.filter((c) => c.responsavel === "Marina Andrade");
+function AppPais({ criancas, setCriancas, responsaveis, eventoAtivo }) {
+  const [responsavelId, setResponsavelId] = useState(null);
   const [qrAtivo, setQrAtivo] = useState(null);
 
-  function gerarCheckin(id) {
+  const responsavel = responsaveis.find((r) => r.id === responsavelId);
+  const meusFilhos = responsavelId
+    ? criancas.filter((c) => (c.responsaveisIds || []).includes(responsavelId))
+    : [];
+
+  async function gerarCheckin(id) {
+    const crianca = criancas.find((c) => c.id === id);
+    await dbAtualizarStatusCrianca(id, "presente", crianca?.turma || null);
     setCriancas((prev) => prev.map((c) => (c.id === id ? { ...c, status: "presente", sala: c.turma } : c)));
     setQrAtivo(id);
   }
 
+  async function fazerCheckout(id) {
+    await dbAtualizarStatusCrianca(id, "retirado", null);
+    setCriancas((prev) => prev.map((c) => (c.id === id ? { ...c, status: "retirado" } : c)));
+    setQrAtivo(null);
+  }
+
+  // Sem login real ainda: o responsável escolhe seu próprio cadastro para simular a sessão.
+  if (!responsavelId) {
+    return (
+      <div style={{ maxWidth: 360, margin: "0 auto" }}>
+        <div style={{ textAlign: "center", marginBottom: 18 }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: "#2f3b2f" }}>Quem é você?</div>
+          <div style={{ fontSize: 12.5, color: "#7a7355", marginTop: 4 }}>Selecione seu cadastro para continuar</div>
+        </div>
+        {responsaveis.length === 0 && (
+          <div style={{ color: "#a39c80", fontSize: 13, textAlign: "center" }}>Nenhum responsável cadastrado ainda.</div>
+        )}
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {responsaveis.map((r) => (
+            <Card key={r.id} onClick={() => setResponsavelId(r.id)} style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer" }}>
+              <FotoAvatar foto={r.foto} size={40} />
+              <div>
+                <div style={{ fontWeight: 600, color: "#2f3b2f", fontSize: 14 }}>{r.nome}</div>
+                <div style={{ fontSize: 12, color: "#7a7355" }}>{r.filiacao}</div>
+              </div>
+            </Card>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ maxWidth: 360, margin: "0 auto" }}>
-      <div style={{ textAlign: "center", marginBottom: 18 }}>
-        <div style={{ fontSize: 13, color: "#7a7355" }}>Olá, Marina</div>
+      <div style={{ textAlign: "center", marginBottom: 18, position: "relative" }}>
+        <div style={{ fontSize: 13, color: "#7a7355" }}>Olá, {responsavel?.nome?.split(" ")[0]}</div>
         <div style={{ fontSize: 16, fontWeight: 700, color: "#2f3b2f" }}>{eventoAtivo}</div>
+        <button onClick={() => setResponsavelId(null)} style={{ position: "absolute", top: 0, right: 0, background: "none", border: "none", color: "#6a8f4a", fontSize: 12, cursor: "pointer" }}>Trocar</button>
       </div>
+      {meusFilhos.length === 0 && (
+        <Card style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 13, color: "#7a7355", textAlign: "center" }}>Nenhuma criança vinculada a este responsável.</div>
+        </Card>
+      )}
       {meusFilhos.map((c) => (
         <Card key={c.id} style={{ marginBottom: 12 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -1106,16 +1125,22 @@ function AppPais({ criancas, setCriancas, eventoAtivo }) {
             {c.status === "retirado" && <Pill tone="neutral">Retirado(a)</Pill>}
             {c.status === "fora" && <Pill tone="neutral">Fora</Pill>}
           </div>
-          {c.status === "fora" ? (
+          {c.status === "fora" && (
             <button onClick={() => gerarCheckin(c.id)} style={{ ...btnPrimary, width: "100%", marginTop: 12 }}>
               Fazer check-in
             </button>
-          ) : (
-            qrAtivo === c.id && (
-              <div style={{ display: "flex", justifyContent: "center", marginTop: 12 }}>
-                <QRBlock value={c.id} />
-              </div>
-            )
+          )}
+          {c.status === "presente" && (
+            <>
+              {qrAtivo === c.id && (
+                <div style={{ display: "flex", justifyContent: "center", marginTop: 12 }}>
+                  <QRBlock value={c.codigo || c.id} />
+                </div>
+              )}
+              <button onClick={() => fazerCheckout(c.id)} style={{ ...btnDanger, width: "100%", marginTop: 12 }}>
+                Fazer check-out
+              </button>
+            </>
           )}
         </Card>
       ))}
@@ -1763,7 +1788,7 @@ export default function App() {
       <div style={{ flex: 1, overflowY: "auto", paddingBottom: 66 }}>
         {perfil === "equipe" ? renderConteudo() : (
           <div style={{ padding: 28 }}>
-            <AppPais criancas={criancas} setCriancas={setCriancas} eventoAtivo={eventoAtivo} />
+            <AppPais criancas={criancas} setCriancas={setCriancas} responsaveis={responsaveis} eventoAtivo={eventoAtivo} />
           </div>
         )}
       </div>
