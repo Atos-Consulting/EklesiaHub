@@ -1,12 +1,13 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from "react";
 import {
-  fetchTudo,
+  fetchTudo, fetchPais,
   dbCriarCrianca, dbAtualizarCrianca, dbExcluirCrianca, dbAtualizarStatusCrianca,
   dbCriarResponsavel, dbAtualizarResponsavel, dbExcluirResponsavel,
   dbCriarProfessor, dbAtualizarProfessor, dbExcluirProfessor,
   dbCriarSala, dbAtualizarSala, dbExcluirSala,
   dbCriarAula, dbExcluirAula,
 } from "./db";
+import { getSession, signIn, signOut, onAuthChange } from "./auth";
 
 // ---------- FOTO CAPTURA ----------
 
@@ -1153,6 +1154,60 @@ function AppPais({ criancas, setCriancas, responsaveis, eventoAtivo }) {
   );
 }
 
+// ---------- LOGIN (equipe) ----------
+
+function TelaLogin({ onEntrar, onIrParaPais }) {
+  const [email, setEmail] = useState("");
+  const [senha, setSenha] = useState("");
+  const [entrando, setEntrando] = useState(false);
+  const [erro, setErro] = useState("");
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setErro("");
+    setEntrando(true);
+    try {
+      await onEntrar(email, senha);
+    } catch (err) {
+      setErro(err.message || "E-mail ou senha inválidos.");
+    } finally {
+      setEntrando(false);
+    }
+  }
+
+  return (
+    <div style={{ minHeight: "100vh", background: "#1a2212", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Helvetica, Arial, sans-serif", padding: 20 }}>
+      <form onSubmit={handleSubmit} style={{ background: "#fffdf8", borderRadius: 16, padding: 32, width: 340, maxWidth: "100%", boxShadow: "0 8px 32px rgba(0,0,0,0.3)", boxSizing: "border-box" }}>
+        <div style={{ textAlign: "center", marginBottom: 24 }}>
+          <div style={{ fontSize: 32, marginBottom: 8 }}>⛪</div>
+          <strong style={{ fontSize: 18, color: "#2f3b2f" }}>EklesiaHub</strong>
+          <div style={{ fontSize: 12.5, color: "#7a7355", marginTop: 4 }}>Acesso da equipe</div>
+        </div>
+
+        <label style={lbl}>E-mail</label>
+        <input type="email" required autoComplete="username" style={inp} value={email} onChange={(e) => setEmail(e.target.value)} placeholder="voce@igreja.com" />
+
+        <label style={lbl}>Senha</label>
+        <input type="password" required autoComplete="current-password" style={inp} value={senha} onChange={(e) => setSenha(e.target.value)} placeholder="••••••••" />
+
+        {erro && <div style={{ ...msgErro, marginTop: 8 }}>{erro}</div>}
+
+        <button type="submit" disabled={entrando} style={{ ...btnPrimary, width: "100%", marginTop: 18, opacity: entrando ? 0.6 : 1, cursor: entrando ? "not-allowed" : "pointer" }}>
+          {entrando ? "Entrando..." : "Entrar"}
+        </button>
+
+        <div style={{ fontSize: 11.5, color: "#a39c80", textAlign: "center", marginTop: 14 }}>
+          Não tem acesso? Peça a um administrador para criar sua conta.
+        </div>
+
+        <button type="button" onClick={onIrParaPais} style={{ ...btnGhost, width: "100%", marginTop: 10 }}>
+          Sou responsável, ir para o check-in
+        </button>
+      </form>
+    </div>
+  );
+}
+
 // ---------- estilos compartilhados ----------
 
 const btnPrimary = { background: "#6a8f4a", color: "#fff", border: "none", borderRadius: 8, padding: "8px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer" };
@@ -1686,22 +1741,67 @@ export default function App() {
   const [erroDb, setErroDb] = useState("");
   const [perfil, setPerfil] = useState("equipe");
 
+  // undefined = ainda verificando se já existe sessão salva; null = sem sessão (precisa logar)
+  const [session, setSession] = useState(undefined);
+
   useEffect(() => {
-    fetchTudo()
-      .then((dados) => {
-        setCriancas(dados.criancas);
-        setSalas(dados.salas);
-        setProfessores(dados.professores);
-        setResponsaveis(dados.responsaveis);
-        setAulas(dados.aulas);
-      })
-      .catch((err) => setErroDb(err.message || "Erro ao conectar ao banco."))
-      .finally(() => setCarregando(false));
+    let ativo = true;
+    getSession().then((s) => { if (ativo) setSession(s); });
+    const inscricao = onAuthChange((s) => { if (ativo) setSession(s); });
+    return () => { ativo = false; inscricao.unsubscribe(); };
   }, []);
+
+  // Modo Pais não exige login (usa as views públicas); modo Equipe só busca dados depois de autenticado.
+  useEffect(() => {
+    if (session === undefined) return;
+    // Sem sessão no modo equipe: a tela de login é exibida antes do spinner de carregamento
+    // (ver ordem dos "if" mais abaixo), então não há necessidade de buscar nada aqui.
+    if (perfil === "equipe" && !session) return;
+
+    let ativo = true;
+    const promessa = perfil === "pais" ? fetchPais() : fetchTudo();
+    promessa
+      .then((dados) => {
+        if (!ativo) return;
+        setErroDb("");
+        setCriancas(dados.criancas);
+        setResponsaveis(dados.responsaveis);
+        setSalas(dados.salas || []);
+        setProfessores(dados.professores || []);
+        setAulas(dados.aulas || []);
+      })
+      .catch((err) => { if (ativo) setErroDb(err.message || "Erro ao conectar ao banco."); })
+      .finally(() => { if (ativo) setCarregando(false); });
+    return () => { ativo = false; };
+  }, [perfil, session]);
+
+  // Reinicia o spinner antes de disparar uma nova busca (troca de perfil ou login bem-sucedido).
+  function trocarPerfil(novoPerfil) {
+    setCarregando(true);
+    setPerfil(novoPerfil);
+  }
+  async function entrarELogar(email, senha) {
+    await signIn(email, senha);
+    setCarregando(true);
+  }
+
   const [modulo, setModulo] = useState("inicio");
   const [tela, setTela] = useState("salas");
   const eventoAtivo = "Culto de domingo · 10h";
-  const membroNome = "Marbson Tomaz";
+  const membroNome = session?.user?.user_metadata?.nome || session?.user?.email || "Equipe";
+
+  if (session === undefined) return (
+    <div style={{ minHeight: "100vh", background: "#f6f2e7", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Helvetica, Arial, sans-serif" }}>
+      <div style={{ textAlign: "center", color: "#7a7355" }}>
+        <div style={{ fontSize: 32, marginBottom: 12 }}>⏳</div>
+        <div style={{ fontSize: 15, fontWeight: 600 }}>Carregando EklesiaHub...</div>
+      </div>
+    </div>
+  );
+
+  if (perfil === "equipe" && !session) {
+    return <TelaLogin onEntrar={entrarELogar} onIrParaPais={() => trocarPerfil("pais")} />;
+  }
 
   if (carregando) return (
     <div style={{ minHeight: "100vh", background: "#f6f2e7", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Helvetica, Arial, sans-serif" }}>
@@ -1754,8 +1854,9 @@ export default function App() {
         <Header title="Mais" subtitle="Configurações e perfil" />
         <div style={{ background: "#fff", borderRadius: 12, padding: "14px 18px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
           <div style={{ fontSize: 13.5, color: "#2f3b2f", fontWeight: 600, marginBottom: 4 }}>{membroNome}</div>
-          <div style={{ fontSize: 12, color: "#7a7355" }}>Membro · Igreja Vila Verde</div>
+          <div style={{ fontSize: 12, color: "#7a7355" }}>Equipe · Igreja Vila Verde</div>
         </div>
+        <button onClick={() => signOut()} style={{ ...btnGhost, marginTop: 14 }}>Sair</button>
       </div>
     );
     // Kids com sub-abas
@@ -1808,8 +1909,8 @@ export default function App() {
         })}
         {/* Toggle perfil discreto no canto */}
         <div style={{ position: "absolute", top: -38, right: 12, display: "flex", gap: 4 }}>
-          <button onClick={() => setPerfil("equipe")} style={{ ...toggleBtn, fontSize: 11, padding: "4px 8px", ...(perfil === "equipe" ? toggleBtnActive : {}) }}>Equipe</button>
-          <button onClick={() => setPerfil("pais")}   style={{ ...toggleBtn, fontSize: 11, padding: "4px 8px", ...(perfil === "pais"   ? toggleBtnActive : {}) }}>Pais</button>
+          <button onClick={() => trocarPerfil("equipe")} style={{ ...toggleBtn, fontSize: 11, padding: "4px 8px", ...(perfil === "equipe" ? toggleBtnActive : {}) }}>Equipe</button>
+          <button onClick={() => trocarPerfil("pais")}   style={{ ...toggleBtn, fontSize: 11, padding: "4px 8px", ...(perfil === "pais"   ? toggleBtnActive : {}) }}>Pais</button>
         </div>
       </div>
     </div>

@@ -138,8 +138,42 @@ export async function dbExcluirCrianca(id) {
 }
 
 export async function dbAtualizarStatusCrianca(id, status, salaAtual) {
-  const { error } = await supabase.from("criancas").update({ status, sala_atual: salaAtual }).eq("id", id);
+  // Usa a função checkin_crianca (SECURITY DEFINER) em vez de UPDATE direto porque
+  // o check-in dos pais roda sem login — a função só altera status/sala_atual.
+  const { error } = await supabase.rpc("checkin_crianca", { p_id: id, p_status: status, p_sala: salaAtual });
   if (error) throw error;
+}
+
+// ── APP DOS PAIS (sem login) ──────────────────────────────────────
+// Usa as views públicas em vez das tabelas reais: elas não expõem CPF,
+// telefone, e-mail, alergia, data de nascimento ou foto de todo mundo
+// para quem só tem a chave anon.
+
+export async function fetchPais() {
+  const [
+    { data: responsaveis, error: e1 },
+    { data: criancas, error: e2 },
+    { data: relacoes, error: e3 },
+  ] = await Promise.all([
+    supabase.from("responsaveis_publico").select("*").order("nome"),
+    supabase.from("criancas_publico").select("*").order("codigo"),
+    supabase.from("crianca_responsavel").select("*"),
+  ]);
+
+  const erros = [e1, e2, e3].filter(Boolean);
+  if (erros.length) throw erros[0];
+
+  return {
+    responsaveis: responsaveis.map((r) => ({ id: r.id, nome: r.nome, filiacao: r.filiacao, foto: r.foto_url || "" })),
+    criancas: criancas.map((c) => ({
+      id: c.id,
+      codigo: c.codigo,
+      nome: c.nome,
+      turma: c.turma,
+      status: c.status,
+      responsaveisIds: relacoes.filter((r) => r.crianca_id === c.id).map((r) => r.responsavel_id),
+    })),
+  };
 }
 
 // ── RESPONSÁVEIS ─────────────────────────────────────────────────
