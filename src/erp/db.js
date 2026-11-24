@@ -139,7 +139,8 @@ export async function salvarPessoa(id, dados) {
 export async function listarNotas() {
   const { data, error } = await supabase
     .from("documentos_entrada")
-    .select("id,tipo,numero,serie,fornecedor_id,data_emissao,data_entrada,valor_total,status,fornecedor:pessoas!fornecedor_id(id,nome)")
+    // A dica usa o NOME da chave estrangeira (composta com empresa_id desde a v5); pela coluna o PostgREST não a encontra.
+    .select("id,tipo,numero,serie,fornecedor_id,data_emissao,data_entrada,valor_total,status,fornecedor:pessoas!documentos_entrada_fornecedor_fk(id,nome)")
     .order("data_entrada", { ascending: false })
     .order("id", { ascending: false })
     .limit(500);
