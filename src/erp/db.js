@@ -1,0 +1,230 @@
+import { supabase } from "../supabase";
+import { extensaoDe, TIPOS_ANEXO, validarAnexo } from "./format";
+
+const BUCKET = "notas-anexos";
+
+// Traduz erros do Supabase/Postgres para mensagens que a equipe entende.
+export function mensagemErro(e) {
+  const msg = e?.message || String(e || "");
+  if (msg.includes("pessoas_documento_uq")) return "Já existe um cadastro com este CPF/CNPJ.";
+  if (msg.includes("documentos_entrada_nota_uq")) return "Esta nota já foi lançada para este fornecedor (mesmo tipo, série e número).";
+  if (msg.includes("documentos_entrada_chave_uq")) return "Já existe uma nota com esta chave de acesso.";
+  if (msg.includes("empresas_cnpj_uq")) return "Já existe uma empresa cadastrada com este CNPJ.";
+  if (msg.includes("plano_contas_empresa_codigo_uq")) return "Já existe uma conta com este código.";
+  if (e?.code === "42501" || msg.includes("row-level security") || msg.includes("permission denied")) {
+    return "Você não tem permissão para esta ação.";
+  }
+  if (e?.code === "23503") return "Este registro está em uso e não pode ser removido ou referenciado.";
+  if (e?.code === "23514") return "Algum dado está fora do permitido. Confira os campos e tente de novo.";
+  if (/failed to fetch|networkerror/i.test(msg)) return "Sem conexão com o servidor. Tente novamente.";
+  return msg || "Erro inesperado.";
+}
+
+// ── Cadastros-base ───────────────────────────────────────────────
+
+export async function fetchCadastros() {
+  const [contas, centros, fundos, pessoas, parametros] = await Promise.all([
+    supabase.from("plano_contas").select("id,codigo,nome,natureza,analitica,ativo").order("codigo"),
+    supabase.from("centros_custo").select("id,nome,ativo").order("nome"),
+    supabase.from("fundos").select("id,nome,restrito,ativo").order("nome"),
+    supabase.from("pessoas").select("*").order("nome"),
+    supabase.from("parametros").select("chave,valor"),
+  ]);
+  const erro = [contas, centros, fundos, pessoas, parametros].find((r) => r.error)?.error;
+  if (erro) throw erro;
+  return {
+    contas: contas.data, centros: centros.data, fundos: fundos.data, pessoas: pessoas.data,
+    // { chave: valor } — ex.: { "nota.numero_tamanho.nfe": "9" }
+    parametros: Object.fromEntries(parametros.data.map((p) => [p.chave, p.valor])),
+  };
+}
+
+// ── Parâmetros da empresa (só o Administrador altera) ────────────
+
+// `alteracoes`: [{ chave, valor }] — valor null/"" remove o parâmetro (volta ao padrão).
+export async function salvarParametros(alteracoes) {
+  for (const { chave, valor } of alteracoes) {
+    if (valor === null || valor === "") {
+      const { error } = await supabase.from("parametros").delete().eq("chave", chave);
+      if (error) throw error;
+    } else {
+      const { error } = await supabase.from("parametros").upsert({ chave, valor: String(valor) }, { onConflict: "empresa_id,chave" });
+      if (error) throw error;
+    }
+  }
+}
+
+// ── Usuários (funções do banco checam a permissão por dentro) ────
+
+export async function listarUsuarios(empresaId) {
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("user_id,nome,email,nivel,ativo,plataforma_admin")
+    .eq("empresa_id", empresaId)
+    .order("nome");
+  if (error) throw error;
+  return data;
+}
+
+export async function criarUsuario(empresaId, { nome, email, senha, nivel }) {
+  const { data, error } = await supabase.rpc("criar_usuario", {
+    p_empresa_id: empresaId, p_email: email, p_senha: senha, p_nome: nome, p_nivel: nivel,
+  });
+  if (error) throw error;
+  return data;
+}
+
+export async function atualizarUsuario(userId, { nome, nivel, ativo }) {
+  const { error } = await supabase.rpc("atualizar_usuario", { p_user_id: userId, p_nome: nome, p_nivel: nivel, p_ativo: ativo });
+  if (error) throw error;
+}
+
+export async function redefinirSenhaUsuario(userId, senha) {
+  const { error } = await supabase.rpc("redefinir_senha_usuario", { p_user_id: userId, p_senha: senha });
+  if (error) throw error;
+}
+
+// ── Empresas (só o administrador da plataforma) ──────────────────
+
+export async function listarEmpresas() {
+  const [empresas, perfis] = await Promise.all([
+    supabase.from("empresas").select("*").order("razao_social"),
+    supabase.from("profiles").select("empresa_id,ativo,nivel"),
+  ]);
+  const erro = [empresas, perfis].find((r) => r.error)?.error;
+  if (erro) throw erro;
+  return empresas.data.map((e) => {
+    const deles = perfis.data.filter((p) => p.empresa_id === e.id);
+    return { ...e, usuarios_ativos: deles.filter((p) => p.ativo).length, administradores: deles.filter((p) => p.ativo && p.nivel === "administrador").length };
+  });
+}
+
+export async function criarEmpresa({ razaoSocial, nomeFantasia, cnpj, adminNome, adminEmail, adminSenha }) {
+  const { data, error } = await supabase.rpc("criar_empresa", {
+    p_razao_social: razaoSocial, p_nome_fantasia: nomeFantasia, p_cnpj: cnpj,
+    p_admin_nome: adminNome, p_admin_email: adminEmail, p_admin_senha: adminSenha,
+  });
+  if (error) throw error;
+  return data;
+}
+
+export async function atualizarEmpresa(id, { razaoSocial, nomeFantasia, cnpj, ativo }) {
+  const { error } = await supabase.rpc("atualizar_empresa", {
+    p_id: id, p_razao_social: razaoSocial, p_nome_fantasia: nomeFantasia, p_cnpj: cnpj, p_ativo: ativo,
+  });
+  if (error) throw error;
+}
+
+export async function salvarPessoa(id, dados) {
+  const linha = {
+    tipo_pessoa: dados.tipoPessoa,
+    nome: dados.nome.trim(),
+    documento: dados.documento || null,
+    email: dados.email.trim() || null,
+    telefone: dados.telefone.trim() || null,
+    observacoes: dados.observacoes.trim() || null,
+    papeis: dados.papeis,
+    ativo: dados.ativo,
+  };
+  const consulta = id
+    ? supabase.from("pessoas").update(linha).eq("id", id)
+    : supabase.from("pessoas").insert(linha);
+  const { data, error } = await consulta.select().single();
+  if (error) throw error;
+  return data;
+}
+
+// ── Notas de entrada ─────────────────────────────────────────────
+
+export async function listarNotas() {
+  const { data, error } = await supabase
+    .from("documentos_entrada")
+    .select("id,tipo,numero,serie,fornecedor_id,data_emissao,data_entrada,valor_total,status,fornecedor:pessoas!fornecedor_id(id,nome)")
+    .order("data_entrada", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(500);
+  if (error) throw error;
+  return data;
+}
+
+export async function carregarNota(id) {
+  const [doc, itens, anexos] = await Promise.all([
+    supabase.from("documentos_entrada").select("*").eq("id", id).single(),
+    supabase.from("documento_entrada_itens").select("*").eq("documento_id", id).order("id"),
+    supabase.from("documento_anexos").select("*").eq("documento_id", id).order("id"),
+  ]);
+  const erro = [doc, itens, anexos].find((r) => r.error)?.error;
+  if (erro) throw erro;
+  return { nota: doc.data, itens: itens.data, anexos: anexos.data };
+}
+
+// Cabeçalho + itens numa única transação (função salvar_nota_entrada).
+export async function salvarNota(id, doc, itens) {
+  const { data, error } = await supabase.rpc("salvar_nota_entrada", { p_id: id ?? null, p_doc: doc, p_itens: itens });
+  if (error) throw error;
+  return data;
+}
+
+export async function aprovarNota(id) {
+  const { error } = await supabase.from("documentos_entrada").update({ status: "aprovada" }).eq("id", id).select("id").single();
+  if (error) throw error;
+}
+
+export async function cancelarNota(id, motivo) {
+  const { error } = await supabase
+    .from("documentos_entrada")
+    .update({ status: "cancelada", motivo_cancelamento: motivo.trim() })
+    .eq("id", id)
+    .select("id")
+    .single();
+  if (error) throw error;
+}
+
+// Só rascunhos podem ser excluídos (a RLS garante). Apaga a nota e depois os arquivos.
+export async function excluirRascunho(id) {
+  const { data: anexos, error: e1 } = await supabase.from("documento_anexos").select("caminho").eq("documento_id", id);
+  if (e1) throw e1;
+  const { error } = await supabase.from("documentos_entrada").delete().eq("id", id).select("id").single();
+  if (error) throw error;
+  if (anexos.length) await supabase.storage.from(BUCKET).remove(anexos.map((a) => a.caminho));
+}
+
+// ── Anexos ───────────────────────────────────────────────────────
+
+const nomeSeguro = (nome) =>
+  nome.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-zA-Z0-9._-]+/g, "_").slice(-80);
+
+export async function enviarAnexo(documentoId, arquivo) {
+  const invalido = validarAnexo(arquivo);
+  if (invalido) throw new Error(invalido);
+
+  const caminho = `${documentoId}/${crypto.randomUUID()}-${nomeSeguro(arquivo.name)}`;
+  const tipoMime = TIPOS_ANEXO[extensaoDe(arquivo.name)];
+
+  const { error: e1 } = await supabase.storage.from(BUCKET).upload(caminho, arquivo, { contentType: tipoMime, upsert: false });
+  if (e1) throw e1;
+
+  const { data, error: e2 } = await supabase
+    .from("documento_anexos")
+    .insert({ documento_id: documentoId, caminho, nome_arquivo: arquivo.name, tipo_mime: tipoMime, tamanho: arquivo.size })
+    .select()
+    .single();
+  if (e2) {
+    await supabase.storage.from(BUCKET).remove([caminho]);
+    throw e2;
+  }
+  return data;
+}
+
+// Primeiro a linha (a RLS só deixa em rascunho), depois o arquivo no Storage.
+export async function removerAnexo(anexo) {
+  const { error } = await supabase.from("documento_anexos").delete().eq("id", anexo.id).select("id").single();
+  if (error) throw error;
+  await supabase.storage.from(BUCKET).remove([anexo.caminho]);
+}
+
+export async function urlAnexo(caminho) {
+  const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(caminho, 60);
+  if (error) throw error;
+  return data.signedUrl;
+}
