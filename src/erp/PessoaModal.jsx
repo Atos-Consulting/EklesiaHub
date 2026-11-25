@@ -3,14 +3,13 @@ import Modal from "./Modal";
 import { lbl, inp, msgErro, maskTelefone } from "../estilos";
 import Icone from "./Icone";
 import { salvarPessoa, mensagemErro } from "./db";
-import { mascararDocumento, limparDocumento, validarDocumento } from "./format";
+import { mascararDocumento, mascararDocumentoLivre, classificarDocumento } from "./format";
 
 // Cadastro de pessoa/empresa (usado por Fornecedores e pelo "+ Novo fornecedor" da nota).
-export default function PessoaModal({ inicial, papelPadrao = "fornecedor", onSalvo, onFechar }) {
+export default function PessoaModal({ inicial, sugestao, papelPadrao = "fornecedor", onSalvo, onFechar }) {
   const [form, setForm] = useState(() => ({
-    tipoPessoa: inicial?.tipo_pessoa || "PJ",
-    nome: inicial?.nome || "",
-    documento: inicial ? mascararDocumento(inicial.tipo_pessoa, inicial.documento || "") : "",
+    nome: inicial?.nome || sugestao?.nome || "",
+    documento: inicial ? mascararDocumento(inicial.tipo_pessoa, inicial.documento || "") : mascararDocumentoLivre(sugestao?.documento || ""),
     email: inicial?.email || "",
     telefone: inicial?.telefone || "",
     observacoes: inicial?.observacoes || "",
@@ -21,11 +20,12 @@ export default function PessoaModal({ inicial, papelPadrao = "fornecedor", onSal
   const [erro, setErro] = useState("");
 
   const campo = (nome) => (e) => setForm((p) => ({ ...p, [nome]: e.target.value }));
-  const rotuloDoc = form.tipoPessoa === "PF" ? "CPF" : "CNPJ";
+  const doc = classificarDocumento(form.documento); // o tipo (PF/PJ) é deduzido do tamanho do documento
+  const msgDoc = !doc.tipo ? "Digite os 11 dígitos do CPF ou os 14 caracteres do CNPJ." : `${doc.tipo === "PF" ? "CPF" : "CNPJ"} inválido. Confira os números.`;
 
   const erros = {
     nome: !form.nome.trim(),
-    documento: !validarDocumento(form.tipoPessoa, form.documento),
+    documento: !doc.valido,
     email: form.email.trim() !== "" && !/^\S+@\S+\.\S+$/.test(form.email.trim()),
   };
   const mostrar = (k) => tentou && erros[k];
@@ -40,7 +40,8 @@ export default function PessoaModal({ inicial, papelPadrao = "fornecedor", onSal
       const papeis = Array.from(new Set([...(inicial?.papeis || []), papelPadrao]));
       const pessoa = await salvarPessoa(inicial?.id, {
         ...form,
-        documento: limparDocumento(form.tipoPessoa, form.documento),
+        tipoPessoa: doc.tipo,
+        documento: doc.limpo,
         papeis,
       });
       onSalvo(pessoa);
@@ -65,25 +66,21 @@ export default function PessoaModal({ inicial, papelPadrao = "fornecedor", onSal
         </>
       }
     >
-      <label style={lbl}>Tipo</label>
-      <div className="segmented">
-        {[["PJ", "Empresa (CNPJ)"], ["PF", "Pessoa física (CPF)"]].map(([v, rotulo]) => (
-          <button key={v} type="button" aria-pressed={form.tipoPessoa === v}
-            onClick={() => setForm((p) => ({ ...p, tipoPessoa: v, documento: "" }))}>
-            {rotulo}
-          </button>
-        ))}
+      <label style={{ ...lbl, marginTop: 4 }} htmlFor="pessoa-doc">CPF / CNPJ *</label>
+      <input id="pessoa-doc" style={{ ...inp, ...borda("documento") }} value={form.documento} autoFocus inputMode="text" autoComplete="off"
+        placeholder="Digite o CPF ou o CNPJ" aria-describedby="pessoa-doc-tipo"
+        onChange={(e) => setForm((p) => ({ ...p, documento: mascararDocumentoLivre(e.target.value) }))} />
+      <div id="pessoa-doc-tipo" style={{ marginTop: 6, fontSize: 12.5, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+        {doc.tipo
+          ? <span className={`pill ${doc.valido ? "pill-ok" : "pill-warn"}`}>{doc.tipo === "PF" ? "Pessoa física (CPF)" : "Empresa (CNPJ)"}</span>
+          : <span className="muted">O tipo (pessoa física ou empresa) é identificado pelo tamanho do documento.</span>}
+        <span className="muted">Não pode haver dois cadastros com o mesmo documento na empresa.</span>
       </div>
+      {mostrar("documento") && <div style={msgErro}>{msgDoc}</div>}
 
-      <label style={lbl}>{form.tipoPessoa === "PF" ? "Nome completo *" : "Razão social / nome *"}</label>
-      <input style={{ ...inp, ...borda("nome") }} value={form.nome} onChange={campo("nome")} autoFocus />
+      <label style={lbl}>{doc.tipo === "PF" ? "Nome completo *" : "Razão social / nome *"}</label>
+      <input style={{ ...inp, ...borda("nome") }} value={form.nome} onChange={campo("nome")} />
       {mostrar("nome") && <div style={msgErro}>Campo obrigatório</div>}
-
-      <label style={lbl}>{rotuloDoc} *</label>
-      <input style={{ ...inp, ...borda("documento") }} value={form.documento}
-        placeholder={form.tipoPessoa === "PF" ? "000.000.000-00" : "00.000.000/0000-00"}
-        onChange={(e) => setForm((p) => ({ ...p, documento: mascararDocumento(p.tipoPessoa, e.target.value) }))} />
-      {mostrar("documento") && <div style={msgErro}>{rotuloDoc} inválido. Confira os números.</div>}
 
       <div style={{ display: "flex", gap: 10 }}>
         <div style={{ flex: 1 }}>

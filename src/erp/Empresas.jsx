@@ -6,6 +6,13 @@ import Modal from "./Modal";
 import { listarEmpresas, criarEmpresa, atualizarEmpresa, mensagemErro } from "./db";
 import { mascararCnpj, limparCnpj, validarCNPJ } from "./format";
 import { gerarSenha, SENHA_MINIMA } from "./senha";
+import ThOrdenavel from "./ThOrdenavel";
+import { useOrdenacao } from "./useOrdenacao";
+
+const COLUNAS = {
+  empresa: (e) => e.nome_fantasia || e.razao_social, cnpj: (e) => e.cnpj,
+  usuarios: (e) => e.usuarios_ativos, situacao: (e) => (e.ativo ? "Ativa" : "Inativa"),
+};
 
 function EmpresaModal({ inicial, ehMinha, onSalvo, onFechar }) {
   const novo = !inicial;
@@ -120,6 +127,7 @@ export default function Empresas({ perfil }) {
     const digitos = t.replace(/[^0-9a-z]/g, "");
     return (empresas || []).filter((e) => !t || e.razao_social.toLowerCase().includes(t) || e.nome_fantasia?.toLowerCase().includes(t) || (digitos && (e.cnpj || "").toLowerCase().includes(digitos)));
   }, [empresas, busca]);
+  const ordenacao = useOrdenacao(filtradas, COLUNAS, { chave: "empresa", dir: "asc" });
 
   return (
     <div>
@@ -143,11 +151,17 @@ export default function Empresas({ perfil }) {
         </div>
         <div className="table-wrap">
           <table className="table">
-            <thead><tr><th>Empresa</th><th>CNPJ</th><th className="num">Usuários ativos</th><th>Situação</th><th /></tr></thead>
+            <thead><tr>
+              <ThOrdenavel chave="empresa" ordenacao={ordenacao}>Empresa</ThOrdenavel>
+              <ThOrdenavel chave="cnpj" ordenacao={ordenacao}>CNPJ</ThOrdenavel>
+              <ThOrdenavel chave="usuarios" ordenacao={ordenacao} className="num">Usuários ativos</ThOrdenavel>
+              <ThOrdenavel chave="situacao" ordenacao={ordenacao}>Situação</ThOrdenavel>
+              <th />
+            </tr></thead>
             <tbody>
               {empresas === null && !erro && <tr><td className="vazio" colSpan={5}>Carregando empresas...</td></tr>}
               {empresas && filtradas.length === 0 && <tr><td className="vazio" colSpan={5}>Nenhuma empresa encontrada.</td></tr>}
-              {filtradas.map((e) => (
+              {ordenacao.ordenadas.map((e) => (
                 <tr key={e.id}>
                   <td className="truncate">
                     <div style={{ fontWeight: 550 }}>{e.nome_fantasia || e.razao_social}{e.id === perfil.empresa_id && <span className="muted" style={{ fontWeight: 400 }}> (sua empresa)</span>}</div>

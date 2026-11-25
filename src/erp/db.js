@@ -6,11 +6,16 @@ const BUCKET = "notas-anexos";
 // Traduz erros do Supabase/Postgres para mensagens que a equipe entende.
 export function mensagemErro(e) {
   const msg = e?.message || String(e || "");
-  if (msg.includes("pessoas_documento_uq")) return "Já existe um cadastro com este CPF/CNPJ.";
+  if (msg.includes("pessoas_documento_uq")) return "Já existe um cadastro com este CPF/CNPJ nesta empresa.";
   if (msg.includes("documentos_entrada_nota_uq")) return "Esta nota já foi lançada para este fornecedor (mesmo tipo, série e número).";
   if (msg.includes("documentos_entrada_chave_uq")) return "Já existe uma nota com esta chave de acesso.";
   if (msg.includes("empresas_cnpj_uq")) return "Já existe uma empresa cadastrada com este CNPJ.";
   if (msg.includes("plano_contas_empresa_codigo_uq")) return "Já existe uma conta com este código.";
+  if (msg.includes("centros_custo_empresa_nome_uq")) return "Já existe um centro de custo com este nome.";
+  if (msg.includes("tipos_contabeis_empresa_nome_uq")) return "Já existe um tipo contábil com este nome.";
+  if (msg.includes("contas_caixa_empresa_nome_uq")) return "Já existe uma conta caixa com este nome.";
+  if (msg.includes("tipos_contabeis_check")) return "A conta de débito e a de crédito precisam ser diferentes.";
+  if (e?.code === "23503" && /(debito|credito|conta|caixa|tipo)_fk/.test(msg)) return "A conta escolhida não pertence a esta empresa. Atualize a página e tente de novo.";
   if (e?.code === "42501" || msg.includes("row-level security") || msg.includes("permission denied")) {
     return "Você não tem permissão para esta ação.";
   }
@@ -23,17 +28,20 @@ export function mensagemErro(e) {
 // ── Cadastros-base ───────────────────────────────────────────────
 
 export async function fetchCadastros() {
-  const [contas, centros, fundos, pessoas, parametros] = await Promise.all([
-    supabase.from("plano_contas").select("id,codigo,nome,natureza,analitica,ativo").order("codigo"),
+  const [contas, centros, fundos, pessoas, parametros, tipos, caixas] = await Promise.all([
+    supabase.from("plano_contas").select("id,codigo,nome,natureza,analitica,pai_id,ativo").order("codigo"),
     supabase.from("centros_custo").select("id,nome,ativo").order("nome"),
     supabase.from("fundos").select("id,nome,restrito,ativo").order("nome"),
     supabase.from("pessoas").select("*").order("nome"),
     supabase.from("parametros").select("chave,valor"),
+    supabase.from("tipos_contabeis").select("*").order("nome"),
+    supabase.from("contas_caixa_saldo").select("*").order("nome"),
   ]);
-  const erro = [contas, centros, fundos, pessoas, parametros].find((r) => r.error)?.error;
+  const erro = [contas, centros, fundos, pessoas, parametros, tipos, caixas].find((r) => r.error)?.error;
   if (erro) throw erro;
   return {
     contas: contas.data, centros: centros.data, fundos: fundos.data, pessoas: pessoas.data,
+    tipos: tipos.data, caixas: caixas.data,
     // { chave: valor } — ex.: { "nota.numero_tamanho.nfe": "9" }
     parametros: Object.fromEntries(parametros.data.map((p) => [p.chave, p.valor])),
   };
@@ -134,6 +142,31 @@ export async function salvarPessoa(id, dados) {
   return data;
 }
 
+// ── Cadastros dos Parâmetros (só o Administrador grava; o banco confere) ─────
+
+async function gravar(tabela, id, linha) {
+  const consulta = id ? supabase.from(tabela).update(linha).eq("id", id) : supabase.from(tabela).insert(linha);
+  const { data, error } = await consulta.select().single();
+  if (error) throw error;
+  return data;
+}
+
+export const salvarCentroCusto = (id, { nome, ativo }) => gravar("centros_custo", id, { nome: nome.trim(), ativo });
+
+export const salvarContaContabil = (id, { codigo, nome, natureza, analitica, paiId, ativo }) =>
+  gravar("plano_contas", id, { codigo: codigo.trim(), nome: nome.trim(), natureza, analitica, pai_id: paiId || null, ativo });
+
+export const salvarTipoContabil = (id, { nome, descricao, contaDebitoId, contaCreditoId, ativo }) =>
+  gravar("tipos_contabeis", id, {
+    nome: nome.trim(), descricao: descricao.trim() || null, conta_debito_id: Number(contaDebitoId), conta_credito_id: Number(contaCreditoId), ativo,
+  });
+
+export const salvarContaCaixa = (id, { nome, banco, agencia, numeroConta, saldoInicial, dataSaldoInicial, contaContabilId, ativo }) =>
+  gravar("contas_caixa", id, {
+    nome: nome.trim(), banco: banco.trim() || null, agencia: agencia.trim() || null, numero_conta: numeroConta.trim() || null,
+    saldo_inicial: saldoInicial, data_saldo_inicial: dataSaldoInicial, conta_contabil_id: contaContabilId ? Number(contaContabilId) : null, ativo,
+  });
+
 // ── Notas de entrada ─────────────────────────────────────────────
 
 export async function listarNotas() {
@@ -157,6 +190,26 @@ export async function carregarNota(id) {
   const erro = [doc, itens, anexos].find((r) => r.error)?.error;
   if (erro) throw erro;
   return { nota: doc.data, itens: itens.data, anexos: anexos.data };
+}
+
+// Notas (não canceladas) que já existem com essas chaves de acesso OU esses números. Usado para
+// avisar de duplicidade antes de importar; o banco continua barrando duplicadas de qualquer jeito.
+export async function buscarNotasExistentes({ chaves = [], numeros = [] }) {
+  const base = () => supabase.from("documentos_entrada").select("id,chave_acesso,fornecedor_id,tipo,serie,numero,status").neq("status", "cancelada");
+  const consultas = [];
+  if (chaves.length) consultas.push(base().in("chave_acesso", chaves));
+  if (numeros.length) consultas.push(base().in("numero", numeros));
+  const respostas = await Promise.all(consultas);
+  const erro = respostas.find((r) => r.error)?.error;
+  if (erro) throw erro;
+  const porId = new Map(respostas.flatMap((r) => r.data).map((n) => [n.id, n]));
+  return [...porId.values()];
+}
+
+export async function buscarCnpjEmpresa(empresaId) {
+  const { data, error } = await supabase.from("empresas").select("cnpj").eq("id", empresaId).maybeSingle();
+  if (error) throw error;
+  return data?.cnpj ?? null;
 }
 
 // Cabeçalho + itens numa única transação (função salvar_nota_entrada).

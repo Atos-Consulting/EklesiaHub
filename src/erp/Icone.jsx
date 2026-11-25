@@ -25,7 +25,12 @@ const ICONES = {
   ajustes: <><path d="M4 6h8M18 6h2M4 12h2M12 12h8M4 18h10M20 18h0" /><circle cx="15" cy="6" r="2.2" /><circle cx="9" cy="12" r="2.2" /><circle cx="17" cy="18" r="2.2" /></>,
   predio: <><rect x="5" y="3" width="14" height="18" rx="1.5" /><path d="M9 7h2M13 7h2M9 11h2M13 11h2M9 15h2M13 15h2M10.5 21v-3h3v3" /></>,
   chave: <><circle cx="8" cy="15" r="4" /><path d="M11 12l9-9M16 7l3 3M14 9l2 2" /></>,
-  editar: <><path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z" /><path d="M13.5 6.5l4 4" /></>,
+  ordem: <path d="M8 9l4-4 4 4M8 15l4 4 4-4" />,
+  ordemCima: <path d="M7 14l5-5 5 5" />,
+  ordemBaixo: <path d="M7 10l5 5 5-5" />,
+  chevronBaixo: <path d="M6 9l6 6 6-6" />,
+  livro: <><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z" /><path d="M4 21V5M9 7h6M9 11h6" /></>,
+  editar:<><path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z" /><path d="M13.5 6.5l4 4" /></>,
 };
 
 export default function Icone({ nome, tamanho = 18, traco = 1.75, ...resto }) {

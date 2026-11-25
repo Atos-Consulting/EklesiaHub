@@ -122,8 +122,20 @@ A matriz está duplicada de propósito: a regra vale no banco (RLS e gatilhos) e
 |---|---|
 | 0 — Fundação | ✅ `profiles` com papéis + RLS por papel, cadastro único de pessoas, navegação por módulo com URL (`src/erp/`), sistema de design (`src/index.css`), Kids arquivado. |
 | 2a — Administrativo (adiantado) | ✅ Notas de entrada (rascunho → aprovada → cancelada, imutável após aprovar, anexos privados, itens com conta contábil) e Fornecedores. Migration: `migration_v4_erp.sql`. |
+| 2a' — Importar XML | ✅ Aba Administrativo → Importar XML: NF-e (55) e NFC-e (65) por arquivo `.xml` (vários de uma vez), cada uma vira **rascunho** com fornecedor (cadastra se novo), itens e o XML anexado; detecta duplicadas, notas não autorizadas e CNPJ de outro destinatário. Por **chave de acesso**: valida o dígito verificador e abre a nota pré-preenchida (a chave só traz emitente, número, série e mês). ⏳ **Baixar o XML direto do Portal Nacional pela chave** exige certificado digital da empresa (serviço NFeDistribuicaoDFe, via função no servidor) ou API paga de terceiros — decisão pendente. ⏳ NFS-e: layout varia por município; precisa de XMLs de exemplo. |
 | 1 — Contábil (núcleo) | Plano de contas (hoje só semente de exemplo, sem tela de edição), centros de custo, fundos, lançamentos com partidas dobradas validadas no banco, razão e balancete. |
 | 2b — Administrativo → Contábil | Aprovar a nota gera título a pagar + lançamento contábil (usa o status `lancada`). Importação de XML da NF-e. |
 | 3 — Financeiro | Caixa/bancos, baixas, contribuições (dízimos/ofertas), fluxo de caixa, conciliação simples. |
 | 4 — Comercial | Produtos, estoque, PDV/vendas, compras via entrada de notas, CMV. |
 | 5 — Dashboard | KPIs consolidados e DRE/balanço. |
+
+
+## 8. Parâmetros contábeis, conta caixa e tributos (`migration_v6_parametros_fiscal.sql`, `migration_v7_niveis_usuarios.sql`)
+
+- **Parâmetros** (Administrador), por área: *Financeiro* → Contas caixa; *Contábil* → Plano de contas, Tipos contábeis, Centros de custo, Orientações contábeis; *Sistema* → Tamanho dos campos.
+- **Tipo contábil**: cada item da nota escolhe um tipo; o tipo define a conta de débito (despesa/ativo) e a de crédito (caixa/banco ou fornecedores a pagar). Os itens guardam as contas da época.
+- **Conta caixa**: de onde sai o pagamento; tem banco, agência, conta, saldo inicial e data; saldo atual = saldo inicial − notas aprovadas a partir da data.
+- **Total da nota**: calculado (itens + frete + seguro + outras − desconto + IPI + ICMS-ST); retenções e demais tributos são informativos. O banco recalcula e confere na aprovação.
+- **Aprovação**: pelo botão *Salvar e aprovar* no formulário, ou marcando rascunhos na lista e *Aprovar selecionadas* (Supervisor/Administrador).
+- **Usuários**: o Supervisor gerencia Supervisor e Usuário da própria empresa; só o Administrador gerencia Administradores.
+- **Cadastro de fornecedor**: campo único CPF/CNPJ; 11 dígitos = pessoa física, 14 = empresa; único por empresa.

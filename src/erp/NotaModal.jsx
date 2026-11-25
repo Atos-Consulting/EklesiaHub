@@ -4,36 +4,52 @@ import { lbl, inp, msgErro } from "../estilos";
 import Icone from "./Icone";
 import Modal from "./Modal";
 import PessoaModal from "./PessoaModal";
+import { TributosNota, TributosItem } from "./TributosCampos";
 import {
   carregarNota, salvarNota, aprovarNota, cancelarNota, excluirRascunho,
   enviarAnexo, removerAnexo, urlAnexo, mensagemErro,
 } from "./db";
 import {
   TIPOS_NOTA, STATUS_NOTA, TOM_STATUS, formatarMoeda, formatarData, formatarTamanho, hojeISO,
-  lerNumero, numeroParaCampo, paraCentavos, somarValores, totalItem, validarAnexo, mascararDocumento,
+  lerNumero, numeroParaCampo, paraCentavos, deCentavos, totalItem, validarAnexo, mascararDocumento,
 } from "./format";
 import { tamanhoNumero } from "./catalogoParametros";
+import {
+  fiscalParaBanco, fiscalDoBanco, somarTributosDosItens,
+  chavesNumericasNota, chavesTextoNota, chavesMarcaNota, chavesNumericasItem, chavesTextoItem,
+} from "./tributos";
 
 const itemVazio = () => ({
   chave: crypto.randomUUID(), descricao: "", quantidade: "1", valorUnitario: "", valorTotal: "",
-  totalManual: false, contaId: "", centroCustoId: "",
+  tipoId: "", centroCustoId: "", fiscal: {}, aberto: false,
 });
-const itemEmBranco = (i) => !i.descricao.trim() && !i.valorUnitario.trim() && !i.valorTotal.trim() && !i.contaId;
+const itemEmBranco = (i) => !i.descricao.trim() && !i.valorUnitario.trim() && !i.valorTotal.trim() && !i.tipoId;
 const limparChave = (v) => String(v || "").toUpperCase().replace(/[^0-9A-Z]/g, "").slice(0, 44);
 const NOVO_FORNECEDOR = "__novo__"; // opção especial do select: abre o cadastro de fornecedor
-const campoTexto = (n) =>String(n ?? "").replace(".", ",");
+const campoTexto = (n) => String(n ?? "").replace(".", ",");
+const dinheiro = (txt) => { const n = lerNumero(txt); return Number.isFinite(n) ? n : 0; };
+const dinheiroInvalido = (txt) => String(txt ?? "").trim() !== "" && !(lerNumero(txt) >= 0);
+const cent = (txt) => paraCentavos(dinheiro(txt));
+const doBanco = (n) => (Number(n) > 0 ? numeroParaCampo(Number(n)) : "");
+const temFiscal = (f) => Object.values(f ?? {}).some((v) => v === true || String(v ?? "").trim() !== "");
 
-export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, onCadastrosMudaram, onMudou, onFechar }) {
+export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, prefill, onCadastrosMudaram, onMudou, onFechar }) {
   const [idAtual, setIdAtual] = useState(notaId);
   const [carregando, setCarregando] = useState(Boolean(notaId));
   const [nota, setNota] = useState(null); // registro do banco (status, datas de aprovação...)
-  const [form, setForm] = useState(() => ({
-    tipo: "nfe", numero: "", serie: "", chaveAcesso: "", fornecedorId: "",
-    dataEmissao: hojeISO(), dataEntrada: hojeISO(), valorTotal: "",
-    centroCustoId: "", fundoId: String(cadastros.fundos.find((f) => f.nome === "Geral" && f.ativo)?.id ?? ""),
-    observacoes: "",
-  }));
+  const [form, setForm] = useState(() => {
+    const caixasAtivas = cadastros.caixas.filter((c) => c.ativo);
+    return {
+      tipo: "nfe", numero: "", serie: "", chaveAcesso: "", fornecedorId: "",
+      dataEmissao: hojeISO(), dataEntrada: hojeISO(), centroCustoId: "",
+      contaCaixaId: caixasAtivas.length === 1 ? String(caixasAtivas[0].id) : "",
+      naturezaOperacao: "", observacoes: "",
+      frete: "", seguro: "", outras: "", desconto: "", fiscal: {},
+      ...prefill, // dados já conhecidos (ex.: lidos da chave de acesso)
+    };
+  });
   const [itens, setItens] = useState(() => [itemVazio()]);
+  const [tributosAbertos, setTributosAbertos] = useState(false);
   const [anexos, setAnexos] = useState([]);
   const [pendentes, setPendentes] = useState([]);
   const [erro, setErro] = useState("");
@@ -49,16 +65,19 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
     setForm({
       tipo: n.tipo, numero: n.numero, serie: n.serie || "", chaveAcesso: n.chave_acesso || "",
       fornecedorId: String(n.fornecedor_id), dataEmissao: n.data_emissao, dataEntrada: n.data_entrada,
-      valorTotal: numeroParaCampo(Number(n.valor_total)),
       centroCustoId: n.centro_custo_id ? String(n.centro_custo_id) : "",
-      fundoId: n.fundo_id ? String(n.fundo_id) : "",
-      observacoes: n.observacoes || "",
+      contaCaixaId: n.conta_caixa_id ? String(n.conta_caixa_id) : "",
+      naturezaOperacao: n.natureza_operacao || "", observacoes: n.observacoes || "",
+      frete: doBanco(n.valor_frete), seguro: doBanco(n.valor_seguro), outras: doBanco(n.valor_outras), desconto: doBanco(n.valor_desconto),
+      fiscal: fiscalDoBanco(n.fiscal),
     });
+    setTributosAbertos(temFiscal(n.fiscal));
     setItens(its.length
       ? its.map((i) => ({
           chave: crypto.randomUUID(), descricao: i.descricao, quantidade: campoTexto(Number(i.quantidade)),
           valorUnitario: numeroParaCampo(Number(i.valor_unitario)), valorTotal: numeroParaCampo(Number(i.valor_total)),
-          totalManual: true, contaId: String(i.conta_id), centroCustoId: i.centro_custo_id ? String(i.centro_custo_id) : "",
+          tipoId: i.tipo_contabil_id ? String(i.tipo_contabil_id) : "", centroCustoId: i.centro_custo_id ? String(i.centro_custo_id) : "",
+          fiscal: fiscalDoBanco(i.fiscal), aberto: false,
         }))
       : [itemVazio()]);
     setAnexos(ax);
@@ -80,18 +99,22 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
   const podeAnexar = podeEditar && (novo || status === "rascunho" || status === "aprovada");
   const ocupadoQualquer = Boolean(ocupado) || carregando;
 
-  const valorTotalNum = lerNumero(form.valorTotal);
-  const itensAtivos = itens.filter((i) => !itemEmBranco(i));
-  const somaItens = somarValores(itensAtivos.map((i) => lerNumero(i.valorTotal) || 0));
-  const diferenca = Number.isFinite(valorTotalNum) ? paraCentavos(valorTotalNum) - paraCentavos(somaItens) : NaN;
-
-  const contasDisponiveis = useMemo(() => {
-    const usadas = new Set(itens.map((i) => i.contaId));
-    return cadastros.contas.filter((c) => (c.analitica && c.ativo && ["despesa", "ativo"].includes(c.natureza)) || usadas.has(String(c.id)));
-  }, [cadastros.contas, itens]);
+  const contaPorId = useMemo(() => new Map(cadastros.contas.map((c) => [String(c.id), c])), [cadastros.contas]);
+  const rotuloConta = (id) => { const c = contaPorId.get(String(id)); return c ? `${c.codigo} — ${c.nome}` : "?"; };
+  const descricaoTipo = (t) => `Débito: ${rotuloConta(t.conta_debito_id)}  |  Crédito: ${rotuloConta(t.conta_credito_id)}`;
+  const caixaSelecionada = cadastros.caixas.find((c) => String(c.id) === form.contaCaixaId);
 
   const fornecedores = cadastros.pessoas.filter(
     (p) => p.papeis.includes("fornecedor") && (p.ativo || String(p.id) === form.fornecedorId));
+
+  // ── Totais: o total da nota NÃO é digitado, é calculado ──
+  const itensAtivos = itens.filter((i) => !itemEmBranco(i));
+  const centItens = itensAtivos.reduce((acc, i) => acc + paraCentavos(dinheiro(i.valorTotal)), 0);
+  const centIpi = cent(form.fiscal.ipi);
+  const centSt = cent(form.fiscal.icms_st);
+  const totalCent = centItens + cent(form.frete) + cent(form.seguro) + cent(form.outras) - cent(form.desconto) + centIpi + centSt;
+  const centRetencoes = cent(form.fiscal.inss) + cent(form.fiscal.irrf) + cent(form.fiscal.csll) + cent(form.fiscal.outras_retencoes)
+    + (form.fiscal.iss_retido === true ? cent(form.fiscal.iss) : 0);
 
   // ── Validação ──
   const erros = { itens: {} };
@@ -103,30 +126,31 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
   if (!form.dataEmissao) erros.dataEmissao = "Obrigatório";
   if (!form.dataEntrada) erros.dataEntrada = "Obrigatório";
   else if (form.dataEmissao && form.dataEntrada < form.dataEmissao) erros.dataEntrada = "Anterior à emissão";
-  if (!(valorTotalNum > 0)) erros.valorTotal = "Informe um valor maior que zero";
   if (chave && chave.length !== 44) erros.chaveAcesso = `A chave tem 44 caracteres (${chave.length})`;
+  for (const k of ["frete", "seguro", "outras", "desconto"]) if (dinheiroInvalido(form[k])) erros[k] = "Valor inválido";
+  if (itensAtivos.length === 0) erros.itensVazios = "Inclua ao menos um item";
+  else if (totalCent <= 0) erros.total = "O total da nota precisa ser maior que zero";
   itensAtivos.forEach((i) => {
     const e = {};
     if (!i.descricao.trim()) e.descricao = true;
     if (!(lerNumero(i.quantidade) > 0)) e.quantidade = true;
     if (!(lerNumero(i.valorUnitario) >= 0)) e.valorUnitario = true;
     if (!(lerNumero(i.valorTotal) >= 0)) e.valorTotal = true;
-    if (!i.contaId) e.contaId = true;
+    if (!i.tipoId) e.tipoId = true;
     if (Object.keys(e).length) erros.itens[i.chave] = e;
   });
   const temErro = Object.keys(erros).some((k) => (k === "itens" ? Object.keys(erros.itens).length > 0 : erros[k]));
-  const notaConsistente = itensAtivos.length > 0 && diferenca === 0;
   const mostrar = (k) => tentou && erros[k];
   const borda = (k) => (mostrar(k) ? { borderColor: "var(--danger)" } : {});
 
   const campo = (nome) => (e) => setForm((p) => ({ ...p, [nome]: e.target.value }));
+  const setFiscal = (k, v) => setForm((p) => ({ ...p, fiscal: { ...p.fiscal, [k]: v } }));
 
   function atualizarItem(chaveItem, patch) {
     setItens((prev) => prev.map((i) => {
       if (i.chave !== chaveItem) return i;
       const novoItem = { ...i, ...patch };
-      if ("valorTotal" in patch) novoItem.totalManual = patch.valorTotal.trim() !== "";
-      if (("quantidade" in patch || "valorUnitario" in patch) && !novoItem.totalManual) {
+      if ("quantidade" in patch || "valorUnitario" in patch) {
         const q = lerNumero(novoItem.quantidade);
         const u = lerNumero(novoItem.valorUnitario);
         novoItem.valorTotal = Number.isFinite(q) && Number.isFinite(u) ? numeroParaCampo(totalItem(q, u)) : "";
@@ -134,6 +158,7 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
       return novoItem;
     }));
   }
+  const setFiscalItem = (chaveItem, k, v) => setItens((prev) => prev.map((i) => (i.chave === chaveItem ? { ...i, fiscal: { ...i.fiscal, [k]: v } } : i)));
 
   // ── Anexos ──
   async function enviarLista(id, arquivos) {
@@ -182,17 +207,20 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
       doc: {
         tipo: form.tipo, numero: form.numero.trim(), serie: form.serie.trim(), chave_acesso: chave,
         fornecedor_id: Number(form.fornecedorId), data_emissao: form.dataEmissao, data_entrada: form.dataEntrada,
-        valor_total: valorTotalNum, centro_custo_id: form.centroCustoId || null, fundo_id: form.fundoId || null,
-        observacoes: form.observacoes.trim(),
+        centro_custo_id: form.centroCustoId || null, conta_caixa_id: form.contaCaixaId || null,
+        natureza_operacao: form.naturezaOperacao.trim(), observacoes: form.observacoes.trim(),
+        valor_frete: dinheiro(form.frete), valor_seguro: dinheiro(form.seguro), valor_outras: dinheiro(form.outras), valor_desconto: dinheiro(form.desconto),
+        fiscal: fiscalParaBanco(form.fiscal, { numeros: chavesNumericasNota, textos: chavesTextoNota, marcas: chavesMarcaNota }),
       },
       itens: itensAtivos.map((i) => ({
         descricao: i.descricao.trim(), quantidade: lerNumero(i.quantidade), valor_unitario: lerNumero(i.valorUnitario),
-        valor_total: lerNumero(i.valorTotal), conta_id: Number(i.contaId), centro_custo_id: i.centroCustoId ? Number(i.centroCustoId) : null,
+        valor_total: lerNumero(i.valorTotal), tipo_contabil_id: Number(i.tipoId), centro_custo_id: i.centroCustoId ? Number(i.centroCustoId) : null,
+        fiscal: fiscalParaBanco(i.fiscal, { numeros: chavesNumericasItem, textos: chavesTextoItem }),
       })),
     };
   }
 
-  // Salva cabeçalho + itens (atômico) e envia anexos pendentes. Retorna o id ou null.
+  // Salva cabeçalho + itens (atômico; o banco calcula o total) e envia anexos pendentes. Retorna o id ou null.
   async function salvar() {
     setTentou(true);
     setErro("");
@@ -217,6 +245,14 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
 
   async function salvarEFechar() {
     if (await salvar()) onFechar();
+  }
+
+  function pedirAprovacao() {
+    setTentou(true);
+    setErro("");
+    if (temErro) setErro("Revise os campos destacados em vermelho.");
+    else if (!form.contaCaixaId) setErro("Informe a conta caixa da nota para aprová-la.");
+    else setConfirmacao("aprovar");
   }
 
   async function aprovar() {
@@ -250,8 +286,10 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
   // ── Interface ──
   const desabilitado = { disabled: !editavel };
   const estiloCampo = (k) => ({ ...inp, ...borda(k) });
+  const somenteLeitura = { ...inp, background: "var(--surface-2)", textAlign: "right", fontWeight: 600 };
   const titulo = novo ? "Nova nota de entrada" : `${TIPOS_NOTA[form.tipo] || "Nota"} ${form.numero}${form.serie ? `/${form.serie}` : ""}`;
-  const colunas = "minmax(160px,2.2fr) 70px 100px 100px minmax(170px,2fr) minmax(110px,1fr) 30px";
+  const colunas = "minmax(150px,2fr) 64px 96px 100px minmax(170px,2fr) minmax(110px,1fr) 32px 32px";
+  const tiposAtivos = cadastros.tipos.filter((t) => t.ativo);
 
   const rodape = carregando ? null : (
     <>
@@ -267,27 +305,25 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
       <button onClick={onFechar} disabled={Boolean(ocupado)} className="btn btn-ghost">{editavel ? "Cancelar" : "Fechar"}</button>
       {editavel && (
         <>
-          <button onClick={salvarEFechar} disabled={ocupadoQualquer} className="btn btn-ghost" style={{ borderColor: "var(--primary)", color: "var(--primary-hover)" }}>
-            {ocupado === "salvando" ? "Salvando..." : "Salvar rascunho"}
+          <button onClick={salvarEFechar} disabled={ocupadoQualquer}
+            className={podeAprovar ? "btn btn-ghost" : "btn btn-primary"}
+            style={podeAprovar ? { borderColor: "var(--primary)", color: "var(--primary-hover)" } : undefined}>
+            {ocupado === "salvando" ? "Salvando..." : "Salvar"}
           </button>
-          {podeAprovar && <button onClick={() => {
-            setTentou(true);
-            setErro("");
-            if (temErro) setErro("Revise os campos destacados em vermelho.");
-            else if (itensAtivos.length === 0) setErro("Inclua ao menos um item para aprovar a nota.");
-            else if (!notaConsistente) setErro("A soma dos itens precisa ser igual ao valor total da nota.");
-            else setConfirmacao("aprovar");
-          }}
-            disabled={ocupadoQualquer} className="btn btn-primary" style={{ opacity: ocupadoQualquer ? 0.6 : 1 }}>
-            Salvar e aprovar
-          </button>}
+          {podeAprovar && (
+            <button onClick={pedirAprovacao} disabled={ocupadoQualquer} className="btn btn-primary">Salvar e aprovar</button>
+          )}
         </>
       )}
     </>
   );
 
+  const linhaTotal = (rotulo, centavos, sinal = "+") => centavos !== 0 && (
+    <div><span>{sinal === "-" ? "(−)" : "(+)"} {rotulo}</span><span>{formatarMoeda(Math.abs(deCentavos(centavos)))}</span></div>
+  );
+
   return (
-    <Modal titulo={titulo} largura={960} onFechar={onFechar} fecharFora={false}
+    <Modal titulo={titulo} largura={1040} onFechar={onFechar} fecharFora={false}
       extra={!novo && <Pill tone={TOM_STATUS[status]}>{STATUS_NOTA[status]}</Pill>} rodape={rodape}>
       {carregando ? (
         <div style={{ padding: 30, textAlign: "center", color: "var(--muted)" }}>Carregando nota...</div>
@@ -332,10 +368,9 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
               <input type="date" style={estiloCampo("dataEntrada")} value={form.dataEntrada} onChange={campo("dataEntrada")} {...desabilitado} />
               {mostrar("dataEntrada") && <div style={msgErro}>{erros.dataEntrada}</div>}
             </div>
-            <div>
-              <label style={lbl}>Valor total da nota *</label>
-              <input style={{ ...estiloCampo("valorTotal"), textAlign: "right" }} inputMode="decimal" placeholder="0,00" value={form.valorTotal} onChange={campo("valorTotal")} {...desabilitado} />
-              {mostrar("valorTotal") && <div style={msgErro}>{erros.valorTotal}</div>}
+            <div style={{ gridColumn: "span 2" }}>
+              <label style={lbl}>Natureza da operação</label>
+              <input style={estiloCampo()} value={form.naturezaOperacao} onChange={campo("naturezaOperacao")} placeholder="Ex.: Compra para uso e consumo" {...desabilitado} />
             </div>
           </div>
 
@@ -372,11 +407,14 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
               </select>
             </div>
             <div>
-              <label style={lbl}>Fundo</label>
-              <select style={estiloCampo()} value={form.fundoId} onChange={campo("fundoId")} {...desabilitado}>
-                <option value="">— Nenhum —</option>
-                {cadastros.fundos.filter((f) => f.ativo || String(f.id) === form.fundoId).map((f) => <option key={f.id} value={f.id}>{f.nome}{f.restrito ? " (restrito)" : ""}</option>)}
+              <label style={lbl}>Conta caixa (de onde sai o pagamento){podeAprovar ? " *" : ""}</label>
+              <select style={estiloCampo()} value={form.contaCaixaId} onChange={campo("contaCaixaId")} {...desabilitado}>
+                <option value="">— Selecione —</option>
+                {cadastros.caixas.filter((c) => c.ativo || String(c.id) === form.contaCaixaId).map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
               </select>
+              {caixaSelecionada
+                ? <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>Saldo atual: <strong style={{ color: Number(caixaSelecionada.saldo_atual) < 0 ? "var(--danger)" : "var(--text)" }}>{formatarMoeda(caixaSelecionada.saldo_atual)}</strong></div>
+                : editavel && cadastros.caixas.length === 0 && <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>Cadastre em Parâmetros → Contas caixa.</div>}
             </div>
           </div>
 
@@ -394,50 +432,103 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
             <h3 className="section-title">Itens da nota</h3>
             {editavel && <button type="button" onClick={() => setItens((p) => [...p, itemVazio()])} className="btn btn-ghost btn-sm">+ Adicionar item</button>}
           </div>
+          {editavel && tiposAtivos.length === 0 && (
+            <div className="alert alert-warn" style={{ marginBottom: 8 }}><Icone nome="alerta" tamanho={16} /><span>Não há tipos contábeis ativos. Um Administrador precisa cadastrá-los em <strong>Parâmetros → Tipos contábeis</strong>.</span></div>
+          )}
+          {mostrar("itensVazios") && <div style={msgErro}>{erros.itensVazios}</div>}
           <div style={{ overflowX: "auto", paddingBottom: 4 }}>
-            <div style={{ minWidth: 820 }}>
+            <div style={{ minWidth: 900 }}>
               <div className="itens-cabecalho" style={{ display: "grid", gridTemplateColumns: colunas, gap: 6, margin: "4px 0 6px" }}>
-                <span>Descrição</span><span>Qtd.</span><span style={{ textAlign: "right" }}>Valor unit.</span><span style={{ textAlign: "right" }}>Total</span><span>Conta contábil</span><span>Centro de custo</span><span />
+                <span>Descrição</span><span>Qtd.</span><span style={{ textAlign: "right" }}>Valor unit.</span><span style={{ textAlign: "right" }}>Total</span><span>Tipo contábil</span><span>Centro de custo</span><span /><span />
               </div>
               {itens.map((i) => {
                 const e = erros.itens[i.chave] || {};
                 const b = (k) => (tentou && e[k] ? { borderColor: "var(--danger)" } : {});
+                const tipoDoItem = cadastros.tipos.find((t) => String(t.id) === i.tipoId);
                 return (
-                  <div key={i.chave} style={{ display: "grid", gridTemplateColumns: colunas, gap: 6, marginBottom: 6, alignItems: "center" }}>
-                    <input style={{ ...estiloCampo(), ...b("descricao") }} value={i.descricao} onChange={(ev) => atualizarItem(i.chave, { descricao: ev.target.value })} {...desabilitado} aria-label="Descrição do item" />
-                    <input style={{ ...estiloCampo(), ...b("quantidade"), textAlign: "right" }} inputMode="decimal" value={i.quantidade} onChange={(ev) => atualizarItem(i.chave, { quantidade: ev.target.value })} {...desabilitado} aria-label="Quantidade" />
-                    <input style={{ ...estiloCampo(), ...b("valorUnitario"), textAlign: "right" }} inputMode="decimal" placeholder="0,00" value={i.valorUnitario} onChange={(ev) => atualizarItem(i.chave, { valorUnitario: ev.target.value })} {...desabilitado} aria-label="Valor unitário" />
-                    <input style={{ ...estiloCampo(), ...b("valorTotal"), textAlign: "right" }} inputMode="decimal" placeholder="0,00" value={i.valorTotal} onChange={(ev) => atualizarItem(i.chave, { valorTotal: ev.target.value })} {...desabilitado} aria-label="Valor total do item" />
-                    <select style={{ ...estiloCampo(), ...b("contaId") }} value={i.contaId} onChange={(ev) => atualizarItem(i.chave, { contaId: ev.target.value })} {...desabilitado} aria-label="Conta contábil">
-                      <option value="">— Selecione —</option>
-                      {contasDisponiveis.map((c) => <option key={c.id} value={c.id}>{c.codigo} — {c.nome}</option>)}
-                    </select>
-                    <select style={estiloCampo()} value={i.centroCustoId} onChange={(ev) => atualizarItem(i.chave, { centroCustoId: ev.target.value })} {...desabilitado} aria-label="Centro de custo do item">
-                      <option value="">Da nota</option>
-                      {cadastros.centros.filter((c) => c.ativo || String(c.id) === i.centroCustoId).map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
-                    </select>
-                    {editavel ? (
-                      <button type="button" className="icon-btn perigo" aria-label="Remover item" onClick={() => setItens((p) => (p.length > 1 ? p.filter((x) => x.chave !== i.chave) : [itemVazio()]))}>
-                        <Icone nome="lixeira" tamanho={16} />
+                  <div key={i.chave} style={{ marginBottom: 6 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: colunas, gap: 6, alignItems: "center" }}>
+                      <input style={{ ...estiloCampo(), ...b("descricao") }} value={i.descricao} onChange={(ev) => atualizarItem(i.chave, { descricao: ev.target.value })} {...desabilitado} aria-label="Descrição do item" />
+                      <input style={{ ...estiloCampo(), ...b("quantidade"), textAlign: "right" }} inputMode="decimal" value={i.quantidade} onChange={(ev) => atualizarItem(i.chave, { quantidade: ev.target.value })} {...desabilitado} aria-label="Quantidade" />
+                      <input style={{ ...estiloCampo(), ...b("valorUnitario"), textAlign: "right" }} inputMode="decimal" placeholder="0,00" value={i.valorUnitario} onChange={(ev) => atualizarItem(i.chave, { valorUnitario: ev.target.value })} {...desabilitado} aria-label="Valor unitário" />
+                      <input style={{ ...somenteLeitura, ...b("valorTotal") }} readOnly tabIndex={-1} placeholder="0,00" value={i.valorTotal} aria-label="Valor total do item (calculado)" title="Quantidade × valor unitário" />
+                      <select style={{ ...estiloCampo(), ...b("tipoId") }} value={i.tipoId} onChange={(ev) => atualizarItem(i.chave, { tipoId: ev.target.value })} {...desabilitado}
+                        aria-label="Tipo contábil" title={tipoDoItem ? descricaoTipo(tipoDoItem) : "Define as contas de débito e crédito da contabilização"}>
+                        <option value="">— Selecione —</option>
+                        {cadastros.tipos.filter((t) => t.ativo || String(t.id) === i.tipoId).map((t) => <option key={t.id} value={t.id}>{t.nome}{t.ativo ? "" : " (inativo)"}</option>)}
+                      </select>
+                      <select style={estiloCampo()} value={i.centroCustoId} onChange={(ev) => atualizarItem(i.chave, { centroCustoId: ev.target.value })} {...desabilitado} aria-label="Centro de custo do item">
+                        <option value="">Da nota</option>
+                        {cadastros.centros.filter((c) => c.ativo || String(c.id) === i.centroCustoId).map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                      </select>
+                      <button type="button" className="icon-btn" aria-label="Tributos do item" aria-expanded={i.aberto}
+                        title="Tributos e dados fiscais do item" onClick={() => atualizarItem(i.chave, { aberto: !i.aberto })}
+                        style={{ position: "relative", color: temFiscal(i.fiscal) ? "var(--primary)" : undefined }}>
+                        <Icone nome="chevronBaixo" tamanho={16} style={{ transform: i.aberto ? "rotate(180deg)" : "none", transition: "transform .15s" }} />
+                        {temFiscal(i.fiscal) && <span style={{ position: "absolute", top: 4, right: 4, width: 6, height: 6, borderRadius: "50%", background: "var(--primary)" }} />}
                       </button>
-                    ) : <span />}
+                      {editavel ? (
+                        <button type="button" className="icon-btn perigo" aria-label="Remover item" onClick={() => setItens((p) => (p.length > 1 ? p.filter((x) => x.chave !== i.chave) : [itemVazio()]))}>
+                          <Icone nome="lixeira" tamanho={16} />
+                        </button>
+                      ) : <span />}
+                    </div>
+                    {i.aberto && (
+                      <div className="painel"><TributosItem fiscal={i.fiscal} onChange={(k, v) => setFiscalItem(i.chave, k, v)} disabled={!editavel} /></div>
+                    )}
                   </div>
                 );
               })}
             </div>
           </div>
 
-          <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 18, flexWrap: "wrap", marginTop: 8, fontSize: 13, color: "var(--text-2)" }}>
-            <span>Soma dos itens: <strong>{formatarMoeda(somaItens)}</strong></span>
-            <span>Total da nota: <strong>{Number.isFinite(valorTotalNum) ? formatarMoeda(valorTotalNum) : "—"}</strong></span>
-            {Number.isFinite(diferenca) && diferenca === 0 && itensAtivos.length > 0 && <Pill tone="ok">Confere</Pill>}
-            {Number.isFinite(diferenca) && diferenca !== 0 && (
+          {/* Ajustes do total e tributos da nota */}
+          <h3 className="section-title">Valores e tributos da nota</h3>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: "0 12px" }}>
+            {[["frete", "Frete"], ["seguro", "Seguro"], ["outras", "Outras despesas"], ["desconto", "Desconto"]].map(([k, rotulo]) => (
+              <div key={k}>
+                <label style={{ ...lbl, marginTop: 0 }}>{rotulo}</label>
+                <input style={{ ...estiloCampo(k), textAlign: "right" }} inputMode="decimal" placeholder="0,00" value={form[k]} onChange={campo(k)} {...desabilitado} aria-label={rotulo} />
+                {mostrar(k) && <div style={msgErro}>{erros[k]}</div>}
+              </div>
+            ))}
+          </div>
+          <button type="button" className="link-btn" style={{ marginTop: 12, fontSize: 13, display: "inline-flex", alignItems: "center", gap: 6 }}
+            onClick={() => setTributosAbertos((v) => !v)} aria-expanded={tributosAbertos}>
+            <Icone nome="chevronBaixo" tamanho={14} style={{ transform: tributosAbertos ? "rotate(180deg)" : "none", transition: "transform .15s" }} />
+            {tributosAbertos ? "Ocultar tributos da nota" : "Informar tributos da nota (ICMS, IPI, PIS, COFINS, ISS, retenções)"}
+            {!tributosAbertos && temFiscal(form.fiscal) && <span className="pill pill-ok" style={{ marginLeft: 4 }}>preenchido</span>}
+          </button>
+          {tributosAbertos && (
+            <div className="painel">
+              {editavel && (
+                <div style={{ display: "flex", justifyContent: "flex-end", paddingTop: 12 }}>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => setForm((p) => ({ ...p, fiscal: { ...p.fiscal, ...somarTributosDosItens(itens) } }))}
+                    title="Soma os tributos informados nos itens e preenche estes totais">Somar tributos dos itens</button>
+                </div>
+              )}
+              <TributosNota fiscal={form.fiscal} onChange={setFiscal} disabled={!editavel} />
+            </div>
+          )}
+
+          <div className="totais" aria-label="Totais da nota">
+            <div><span>Total dos itens</span><span>{formatarMoeda(deCentavos(centItens))}</span></div>
+            {linhaTotal("Frete", cent(form.frete))}
+            {linhaTotal("Seguro", cent(form.seguro))}
+            {linhaTotal("Outras despesas", cent(form.outras))}
+            {linhaTotal("Desconto", cent(form.desconto), "-")}
+            {linhaTotal("IPI", centIpi)}
+            {linhaTotal("ICMS ST", centSt)}
+            <div className="final"><span>Total da nota</span><span>{formatarMoeda(deCentavos(totalCent))}</span></div>
+            {centRetencoes > 0 && (
               <>
-                <Pill tone="warn">Diferença de {formatarMoeda(Math.abs(diferenca) / 100)}</Pill>
-                {editavel && <button type="button" onClick={() => setForm((p) => ({ ...p, valorTotal: numeroParaCampo(somaItens) }))} className="btn btn-ghost btn-sm">Usar soma dos itens como total</button>}
+                <div className="sub"><span>(−) Retenções</span><span>{formatarMoeda(deCentavos(centRetencoes))}</span></div>
+                <div className="sub"><span>Valor líquido a pagar</span><span>{formatarMoeda(deCentavos(totalCent - centRetencoes))}</span></div>
               </>
             )}
           </div>
+          {mostrar("total") && <div style={{ ...msgErro, textAlign: "right" }}>{erros.total}</div>}
+          <div className="muted" style={{ fontSize: 12, textAlign: "right", marginTop: 6 }}>O total é calculado automaticamente: não pode ser digitado.</div>
 
           <label style={lbl}>Observações</label>
           <textarea style={{ ...estiloCampo(), minHeight: 52, resize: "vertical", fontFamily: "inherit" }} value={form.observacoes} onChange={campo("observacoes")} {...desabilitado} />
@@ -484,7 +575,8 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
         <Modal titulo="Aprovar nota?" largura={440} nivel={400} onFechar={() => setConfirmacao(null)}
           rodape={<><button className="btn btn-ghost" onClick={() => setConfirmacao(null)}>Voltar</button><button className="btn btn-primary" onClick={aprovar}>Sim, aprovar</button></>}>
           <p style={{ fontSize: 13.5, color: "var(--text-2)", margin: "4px 0 12px" }}>
-            Depois de aprovada, a nota <strong>não poderá mais ser editada</strong> — só cancelada, com motivo. Confira fornecedor, valores e contas.
+            Depois de aprovada, a nota <strong>não poderá mais ser editada</strong> — só cancelada, com motivo. O valor de{" "}
+            <strong>{formatarMoeda(deCentavos(totalCent))}</strong> sairá da conta caixa <strong>{caixaSelecionada?.nome}</strong>.
           </p>
         </Modal>
       )}
@@ -498,7 +590,7 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
         <Modal titulo="Cancelar nota aprovada" largura={460} nivel={400} onFechar={() => setConfirmacao(null)}
           rodape={<><button className="btn btn-ghost" onClick={() => setConfirmacao(null)}>Voltar</button>
             <button className="btn btn-danger" style={{ opacity: motivoCancel.trim().length < 5 ? 0.5 : 1 }} disabled={motivoCancel.trim().length < 5 || ocupado === "cancelando"} onClick={cancelar}>Cancelar nota</button></>}>
-          <p style={{ fontSize: 13.5, color: "var(--text-2)", margin: "4px 0 0" }}>O cancelamento é permanente e fica registrado. Informe o motivo:</p>
+          <p style={{ fontSize: 13.5, color: "var(--text-2)", margin: "4px 0 0" }}>O cancelamento é permanente, fica registrado e devolve o valor à conta caixa. Informe o motivo:</p>
           <textarea autoFocus style={{ ...inp, minHeight: 70, marginTop: 8, marginBottom: 8, fontFamily: "inherit" }} value={motivoCancel} onChange={(e) => setMotivoCancel(e.target.value)} placeholder="Ex.: lançada em duplicidade (mín. 5 caracteres)" />
         </Modal>
       )}

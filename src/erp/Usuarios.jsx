@@ -6,8 +6,15 @@ import Modal from "./Modal";
 import { listarUsuarios, criarUsuario, atualizarUsuario, redefinirSenhaUsuario, mensagemErro } from "./db";
 import { NIVEIS, NIVEIS_ORDEM, rotuloNivel } from "./permissoes";
 import { gerarSenha, SENHA_MINIMA } from "./senha";
+import ThOrdenavel from "./ThOrdenavel";
+import { useOrdenacao } from "./useOrdenacao";
 
 const TOM_NIVEL = { administrador: "ok", supervisor: "warn", usuario: "neutral" };
+const COLUNAS = {
+  nome: (u) => u.nome, email: (u) => u.email,
+  nivel: (u) => NIVEIS_ORDEM.indexOf(u.nivel), // administrador, supervisor, usuário
+  situacao: (u) => (u.ativo ? "Ativo" : "Inativo"),
+};
 
 // Campo de senha com "Mostrar", "Gerar" e "Copiar" — o administrador repassa a senha ao usuário.
 function CampoSenha({ id, valor, onChange, erro }) {
@@ -32,7 +39,7 @@ function CampoSenha({ id, valor, onChange, erro }) {
   );
 }
 
-function UsuarioModal({ inicial, empresaId, souEu, onSalvo, onFechar }) {
+function UsuarioModal({ inicial, empresaId, souEu, niveisQueGere, onSalvo, onFechar }) {
   const novo = !inicial;
   const [form, setForm] = useState(() => ({
     nome: inicial?.nome || "", email: inicial?.email || "", nivel: inicial?.nivel || "usuario",
@@ -81,7 +88,7 @@ function UsuarioModal({ inicial, empresaId, souEu, onSalvo, onFechar }) {
 
       <label style={lbl} htmlFor="u-nivel">Nível de acesso *</label>
       <select id="u-nivel" style={inp} value={form.nivel} onChange={campo("nivel")} disabled={souEu}>
-        {NIVEIS_ORDEM.map((n) => <option key={n} value={n}>{NIVEIS[n].rotulo}</option>)}
+        {NIVEIS_ORDEM.filter((n) => niveisQueGere.includes(n)).map((n) => <option key={n} value={n}>{NIVEIS[n].rotulo}</option>)}
       </select>
       <div className="muted" style={{ fontSize: 12.5, marginTop: 6 }}>{NIVEIS[form.nivel].descricao}</div>
       {souEu && <div className="muted" style={{ fontSize: 12.5, marginTop: 6 }}>Você não pode alterar o seu próprio nível nem se desativar.</div>}
@@ -138,7 +145,7 @@ function SenhaModal({ usuario, onSalvo, onFechar }) {
   );
 }
 
-export default function Usuarios({ perfil }) {
+export default function Usuarios({ perfil, niveisQueGere }) {
   const [usuarios, setUsuarios] = useState(null);
   const [erro, setErro] = useState("");
   const [busca, setBusca] = useState("");
@@ -157,6 +164,9 @@ export default function Usuarios({ perfil }) {
     return (usuarios || []).filter((u) => !t || u.nome?.toLowerCase().includes(t) || u.email?.toLowerCase().includes(t));
   }, [usuarios, busca]);
 
+  const ordenacao = useOrdenacao(filtrados, COLUNAS, { chave: "nome", dir: "asc" });
+  const podeGerir = (u) => niveisQueGere.includes(u.nivel); // Supervisor não edita Administrador
+
   function depoisDeSalvar(mensagem) {
     setEditando(null);
     setSenhaDe(null);
@@ -167,7 +177,7 @@ export default function Usuarios({ perfil }) {
   return (
     <div>
       <div className="page-header">
-        <Header title="Usuários" subtitle={`Quem acessa o sistema de ${perfil.empresa_nome}, e com qual nível.`} />
+        <Header title="Usuários" subtitle={`Quem acessa o sistema de ${perfil.empresa_nome}, e com qual nível.${niveisQueGere.length < 3 ? " Você gerencia usuários do seu nível e abaixo." : ""}`} />
         <button className="btn btn-primary" onClick={() => setEditando("novo")}><Icone nome="mais" tamanho={16} traco={2.2} /> Novo usuário</button>
       </div>
 
@@ -194,11 +204,17 @@ export default function Usuarios({ perfil }) {
         </div>
         <div className="table-wrap">
           <table className="table">
-            <thead><tr><th>Nome</th><th>E-mail</th><th>Nível</th><th>Situação</th><th /></tr></thead>
+            <thead><tr>
+              <ThOrdenavel chave="nome" ordenacao={ordenacao}>Nome</ThOrdenavel>
+              <ThOrdenavel chave="email" ordenacao={ordenacao}>E-mail</ThOrdenavel>
+              <ThOrdenavel chave="nivel" ordenacao={ordenacao}>Nível</ThOrdenavel>
+              <ThOrdenavel chave="situacao" ordenacao={ordenacao}>Situação</ThOrdenavel>
+              <th />
+            </tr></thead>
             <tbody>
               {usuarios === null && !erro && <tr><td className="vazio" colSpan={5}>Carregando usuários...</td></tr>}
               {usuarios && filtrados.length === 0 && <tr><td className="vazio" colSpan={5}>Nenhum usuário encontrado.</td></tr>}
-              {filtrados.map((u) => (
+              {ordenacao.ordenadas.map((u) => (
                 <tr key={u.user_id}>
                   <td className="truncate" style={{ fontWeight: 550 }}>
                     {u.nome}{u.user_id === perfil.user_id && <span className="muted" style={{ fontWeight: 400 }}> (você)</span>}
@@ -207,10 +223,12 @@ export default function Usuarios({ perfil }) {
                   <td><Pill tone={TOM_NIVEL[u.nivel]}>{rotuloNivel(u.nivel)}</Pill></td>
                   <td><Pill tone={u.ativo ? "ok" : "neutral"}>{u.ativo ? "Ativo" : "Inativo"}</Pill></td>
                   <td style={{ textAlign: "right" }}>
-                    <div style={{ display: "inline-flex", gap: 6 }}>
-                      <button className="btn btn-ghost btn-sm" onClick={() => setEditando(u)}>Editar</button>
-                      <button className="btn btn-ghost btn-sm" onClick={() => setSenhaDe(u)}>Redefinir senha</button>
-                    </div>
+                    {podeGerir(u) ? (
+                      <div style={{ display: "inline-flex", gap: 6 }}>
+                        <button className="btn btn-ghost btn-sm" onClick={() => setEditando(u)}>Editar</button>
+                        <button className="btn btn-ghost btn-sm" onClick={() => setSenhaDe(u)}>Redefinir senha</button>
+                      </div>
+                    ) : <span className="muted" style={{ fontSize: 12.5 }}>Só um Administrador altera</span>}
                   </td>
                 </tr>
               ))}
@@ -222,7 +240,7 @@ export default function Usuarios({ perfil }) {
 
       {editando && (
         <UsuarioModal inicial={editando === "novo" ? null : editando} empresaId={perfil.empresa_id}
-          souEu={editando !== "novo" && editando.user_id === perfil.user_id}
+          souEu={editando !== "novo" && editando.user_id === perfil.user_id} niveisQueGere={niveisQueGere}
           onSalvo={() => depoisDeSalvar(editando === "novo" ? "Usuário criado. Repasse a senha inicial a ele." : "Usuário atualizado.")}
           onFechar={() => setEditando(null)} />
       )}

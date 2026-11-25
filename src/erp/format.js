@@ -101,6 +101,20 @@ export function validarCNPJ(v) {
 
 export const validarDocumento = (tipoPessoa, v) => (tipoPessoa === "PF" ? validarCPF(v) : validarCNPJ(v));
 
+// Campo único de CPF/CNPJ: o tipo da pessoa vem do que foi digitado.
+//   11 dígitos → PF (CPF) · 14 caracteres → PJ (CNPJ, numérico ou alfanumérico) · outro tamanho → ainda indefinido.
+export const limparDocumentoLivre = (v) => limparCnpj(v).slice(0, 14);
+export const mascararDocumentoLivre = (v) => {
+  const limpo = limparDocumentoLivre(v);
+  return /^\d{0,11}$/.test(limpo) ? mascararCpf(limpo) : mascararCnpj(limpo);
+};
+export function classificarDocumento(v) {
+  const limpo = limparDocumentoLivre(v);
+  if (/^\d{11}$/.test(limpo)) return { tipo: "PF", limpo, valido: validarCPF(limpo) };
+  if (limpo.length === 14) return { tipo: "PJ", limpo, valido: validarCNPJ(limpo) };
+  return { tipo: null, limpo, valido: false };
+}
+
 // ── Arquivos ─────────────────────────────────────────────────────
 export const TAMANHO_MAX_ANEXO = 10 * 1024 * 1024;
 export const TIPOS_ANEXO = {

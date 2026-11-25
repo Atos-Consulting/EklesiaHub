@@ -4,7 +4,9 @@ import Icone from "./Icone";
 import Marca from "./Marca";
 import NotasEntrada from "./NotasEntrada";
 import Fornecedores from "./Fornecedores";
+import ImportarXml from "./ImportarXml";
 import Parametros from "./Parametros";
+import { ABAS_PARAMETROS } from "./parametros/grupos";
 import Usuarios from "./Usuarios";
 import Empresas from "./Empresas";
 import MinhaConta from "./MinhaConta";
@@ -18,7 +20,7 @@ const MODULOS = [
     descricao: "Indicadores consolidados da empresa em uma única tela.",
     previsto: ["Saldo de caixa e bancos", "Contas a pagar e a receber da semana", "Entradas x saídas do mês", "Resultado do período (superávit/déficit)", "Vendas da livraria e do bazar"] },
   { id: "administrativo", grupo: "Gestão", rotulo: "Administrativo", icone: "pasta", pronto: true,
-    telas: [{ id: "notas", rotulo: "Notas de entrada" }, { id: "fornecedores", rotulo: "Fornecedores" }] },
+    telas: [{ id: "notas", rotulo: "Notas de entrada" }, { id: "fornecedores", rotulo: "Fornecedores" }, { id: "importar", rotulo: "Importar XML" }] },
   { id: "financeiro", grupo: "Gestão", rotulo: "Financeiro", icone: "carteira", pronto: false,
     descricao: "Controle de entradas, saídas e saldos.",
     previsto: ["Contas a pagar e a receber", "Caixa, contas bancárias e conciliação", "Dízimos, ofertas e campanhas", "Orçamento e fluxo de caixa"] },
@@ -28,9 +30,10 @@ const MODULOS = [
   { id: "comercial", grupo: "Gestão", rotulo: "Comercial", icone: "sacola", pronto: false,
     descricao: "Livraria, bazar e demais vendas.",
     previsto: ["Produtos e controle de estoque", "Vendas e ponto de venda (PDV)", "Compras via notas de entrada", "Custo das mercadorias vendidas"] },
-  { id: "usuarios", grupo: "Sistema", rotulo: "Usuários", icone: "pessoas", pronto: true, visivel: (p) => p.administrar },
-  { id: "parametros", grupo: "Sistema", rotulo: "Parâmetros", icone: "ajustes", pronto: true, visivel: (p) => p.administrar },
+  // Grupo Sistema, nesta ordem: Empresas (administrador da plataforma), Usuários, Parâmetros (administrador da empresa).
   { id: "empresas", grupo: "Sistema", rotulo: "Empresas", icone: "predio", pronto: true, visivel: (p) => p.plataforma },
+  { id: "usuarios", grupo: "Sistema", rotulo: "Usuários", icone: "pessoas", pronto: true, visivel: (p) => p.gerirUsuarios },
+  { id: "parametros", grupo: "Sistema", rotulo: "Parâmetros", icone: "ajustes", pronto: true, abas: true, telas: ABAS_PARAMETROS, visivel: (p) => p.administrar },
 ];
 
 // Rota por URL (#/modulo/tela): botão voltar, atualizar a página e links diretos funcionam.
@@ -76,7 +79,9 @@ export default function ErpApp({ perfil, onSair }) {
     () => fetchCadastros().then((dados) => { setCadastros(dados); setErro(""); }).catch((e) => setErro(mensagemErro(e))),
     [],
   );
-  useEffect(() => { if (precisaCadastros) recarregarCadastros(); }, [precisaCadastros, recarregarCadastros]);
+  // Recarrega ao entrar em Administrativo/Parâmetros: saldos das contas caixa e cadastros podem ter mudado em outra tela.
+  const moduloId = modulo?.id;
+  useEffect(() => { if (precisaCadastros) recarregarCadastros(); }, [precisaCadastros, moduloId, recarregarCadastros]);
 
   const hrefModulo = (m) => `#/${m.id}${m.telas ? `/${m.telas[0].id}` : ""}`;
   const grupos = [...new Set(visiveis.map((m) => m.grupo))];
@@ -104,13 +109,15 @@ export default function ErpApp({ perfil, onSair }) {
         </>
       );
     }
-    if (modulo.id === "usuarios") return <Usuarios perfil={perfil} />;
+    if (modulo.id === "usuarios") return <Usuarios perfil={perfil} niveisQueGere={perm.niveisQueGere} />;
     if (modulo.id === "empresas") return <Empresas perfil={perfil} />;
     if (erro) return <div className="alert alert-danger" role="alert"><Icone nome="alerta" tamanho={16} /><span>{erro}</span></div>;
     if (!cadastros) return <div className="carregando-linha"><div className="spinner" /> Carregando...</div>;
-    if (modulo.id === "parametros") return <Parametros cadastros={cadastros} onCadastrosMudaram={recarregarCadastros} />;
+    if (modulo.id === "parametros") return <Parametros aba={tela?.id} cadastros={cadastros} onCadastrosMudaram={recarregarCadastros} />;
     const props = { cadastros, podeEditar: perm.lancar, podeAprovar: perm.aprovar, onCadastrosMudaram: recarregarCadastros };
-    return tela?.id === "fornecedores" ? <Fornecedores {...props} /> : <NotasEntrada {...props} />;
+    if (tela?.id === "fornecedores") return <Fornecedores {...props} />;
+    if (tela?.id === "importar") return <ImportarXml perfil={perfil} {...props} />;
+    return <NotasEntrada {...props} />;
   }
 
   function item(m) {
@@ -123,7 +130,7 @@ export default function ErpApp({ perfil, onSair }) {
           <span className="texto">{m.rotulo}</span>
           {!m.pronto && <span className="nav-soon">em breve</span>}
         </a>
-        {ativo && m.telas && (
+        {ativo && m.telas && !m.abas && (
           <div className="nav-sub">
             {m.telas.map((t) => (
               <a key={t.id} href={`#/${m.id}/${t.id}`} className="nav-item"

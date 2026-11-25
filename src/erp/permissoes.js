@@ -8,7 +8,7 @@ export const NIVEIS = {
   },
   supervisor: {
     rotulo: "Supervisor",
-    descricao: "Lança, aprova e cancela notas. Não gerencia usuários nem parâmetros.",
+    descricao: "Lança, aprova e cancela notas e gerencia usuários do seu nível para baixo (Supervisor e Usuário). Não acessa parâmetros.",
   },
   usuario: {
     rotulo: "Usuário",
@@ -17,6 +17,8 @@ export const NIVEIS = {
 };
 
 export const NIVEIS_ORDEM = ["administrador", "supervisor", "usuario"];
+// Cada nível gere o seu e os de baixo (o Supervisor, também chamado de coordenador, nunca mexe em Administrador).
+const NIVEIS_ABAIXO = { administrador: ["administrador", "supervisor", "usuario"], supervisor: ["supervisor", "usuario"], usuario: [] };
 export const rotuloNivel = (nivel) => NIVEIS[nivel]?.rotulo ?? "Sem acesso";
 
 export function permissoes(perfil) {
@@ -25,7 +27,9 @@ export function permissoes(perfil) {
   return {
     lancar: temNivel,                                  // criar/editar rascunhos e cadastrar fornecedores
     aprovar: n === "administrador" || n === "supervisor", // aprovar e cancelar notas
-    administrar: n === "administrador",                // Usuários e Parâmetros da própria empresa
+    administrar: n === "administrador",                // Parâmetros da própria empresa
+    gerirUsuarios: n === "administrador" || n === "supervisor", // Usuários: cada um gere o seu nível e os abaixo
+    niveisQueGere: NIVEIS_ABAIXO[n] ?? [],             // níveis que este usuário pode criar/editar
     plataforma: Boolean(perfil?.plataforma_admin),     // criar e gerenciar empresas
   };
 }
