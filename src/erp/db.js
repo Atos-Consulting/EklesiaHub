@@ -111,6 +111,19 @@ export async function listarEmpresas() {
   });
 }
 
+// Empresas ativas em que o administrador da plataforma pode trabalhar.
+export async function listarEmpresasAtivas() {
+  const { data, error } = await supabase.from("empresas").select("id,razao_social,nome_fantasia").eq("ativo", true).order("razao_social");
+  if (error) throw error;
+  return data;
+}
+
+// Muda a empresa em que o administrador da plataforma está trabalhando (o banco confere a permissão).
+export async function trocarEmpresa(empresaId) {
+  const { error } = await supabase.rpc("trocar_empresa", { p_empresa: empresaId });
+  if (error) throw error;
+}
+
 export async function criarEmpresa({ razaoSocial, nomeFantasia, cnpj, adminNome, adminEmail, adminSenha }) {
   const { data, error } = await supabase.rpc("criar_empresa", {
     p_razao_social: razaoSocial, p_nome_fantasia: nomeFantasia, p_cnpj: cnpj,

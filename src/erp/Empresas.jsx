@@ -138,7 +138,7 @@ export default function Empresas({ perfil }) {
 
       <div className="alert alert-warn" style={{ marginBottom: 16 }}>
         <Icone nome="escudo" tamanho={16} />
-        <span>Como administrador da plataforma você cria e gerencia empresas, mas <strong>não vê os dados de negócio</strong> das outras empresas (notas, fornecedores, contas).</span>
+        <span>Como administrador da plataforma você cria e gerencia empresas. Para trabalhar em uma delas (notas, fornecedores, financeiro), <strong>clique no nome da empresa no topo do menu</strong> e escolha: lá dentro você age como Administrador.</span>
       </div>
       {aviso && <div className="alert alert-ok" role="status" style={{ marginBottom: 16 }}><Icone nome="check" tamanho={16} /><span>{aviso}</span></div>}
       {erro && <div className="alert alert-danger" role="alert" style={{ marginBottom: 16 }}><Icone nome="alerta" tamanho={16} /><span>{erro}</span></div>}

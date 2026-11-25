@@ -94,5 +94,7 @@ export default function App() {
       texto={`A conta ${email} ainda não foi liberada. Peça a um administrador para cadastrá-la em uma empresa.`} acoes={botaoSair} />;
   }
 
-  return <ErpApp perfil={perfil} onSair={() => signOut()} />;
+  // key: ao trocar de empresa, a tela inteira recomeça do zero (nada da empresa anterior fica em memória)
+  return <ErpApp key={perfil.empresa_id} perfil={perfil} onSair={() => signOut()}
+    onEmpresaTrocada={() => { setPerfilInfo(null); setTentativa((t) => t + 1); }} />;
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Header } from "../ui";
 import Icone from "./Icone";
 import Marca from "./Marca";
@@ -12,7 +12,7 @@ import { ABAS_PARAMETROS } from "./parametros/grupos";
 import Usuarios from "./Usuarios";
 import Empresas from "./Empresas";
 import MinhaConta from "./MinhaConta";
-import { fetchCadastros, mensagemErro } from "./db";
+import { fetchCadastros, listarEmpresasAtivas, trocarEmpresa, mensagemErro } from "./db";
 import { permissoes, rotuloNivel } from "./permissoes";
 
 // Módulos do ERP. `visivel(perm)` decide quem enxerga; `pronto` indica o que já foi construído.
@@ -52,7 +52,74 @@ const dataHoje = () => {
   return texto.charAt(0).toUpperCase() + texto.slice(1);
 };
 
-export default function ErpApp({ perfil, onSair }) {
+// Nome da empresa no topo do menu. Para o administrador da plataforma vira um seletor: clica e troca de empresa.
+function SeletorEmpresa({ perfil, plataforma, onTrocada }) {
+  const [aberto, setAberto] = useState(false);
+  const [empresas, setEmpresas] = useState(null);
+  const [trocando, setTrocando] = useState(null);
+  const [erro, setErro] = useState("");
+  const raiz = useRef(null);
+  const nomeDe = (e) => e.nome_fantasia || e.razao_social;
+
+  useEffect(() => {
+    if (!aberto) return undefined;
+    listarEmpresasAtivas().then(setEmpresas).catch((e) => setErro(mensagemErro(e)));
+    const fora = (ev) => { if (raiz.current && !raiz.current.contains(ev.target)) setAberto(false); };
+    const esc = (ev) => { if (ev.key === "Escape") setAberto(false); };
+    document.addEventListener("mousedown", fora);
+    document.addEventListener("keydown", esc);
+    return () => { document.removeEventListener("mousedown", fora); document.removeEventListener("keydown", esc); };
+  }, [aberto]);
+
+  async function escolher(id) {
+    if (id === perfil.empresa_id) { setAberto(false); return; }
+    setTrocando(id);
+    setErro("");
+    try { await trocarEmpresa(id); onTrocada(); }
+    catch (e) { setErro(mensagemErro(e)); setTrocando(null); }
+  }
+
+  const conteudo = (
+    <>
+      <Marca />
+      <div style={{ minWidth: 0 }}>
+        <div className="brand-name">EklesiaHub</div>
+        <div className="brand-empresa" title={perfil.empresa_nome}>{perfil.empresa_nome}</div>
+      </div>
+    </>
+  );
+  if (!plataforma) return <div className="brand">{conteudo}</div>;
+
+  return (
+    <div className="brand" ref={raiz}>
+      <button type="button" className="brand-trocar" aria-haspopup="menu" aria-expanded={aberto}
+        title="Trocar de empresa" onClick={() => setAberto((v) => !v)}>
+        {conteudo}
+        <Icone nome="chevronBaixo" tamanho={16} className="seta" />
+      </button>
+      {aberto && (
+        <div className="empresas-menu" role="menu" aria-label="Empresas">
+          <div className="titulo">Trabalhar na empresa</div>
+          {empresas === null && !erro && <div className="muted" style={{ padding: "8px 10px", fontSize: 13 }}>Carregando...</div>}
+          {(empresas || []).map((e) => (
+            <button key={e.id} type="button" role="menuitem" aria-current={e.id === perfil.empresa_id}
+              disabled={trocando !== null} onClick={() => escolher(e.id)}>
+              <span className="nome" title={e.razao_social}>{nomeDe(e)}</span>
+              {e.id === perfil.empresa_origem_id && <span className="pill pill-neutral" style={{ fontSize: 10.5, padding: "0 7px" }}>sua</span>}
+              {trocando === e.id ? <span className="muted" style={{ fontSize: 12 }}>abrindo…</span>
+                : e.id === perfil.empresa_id && <Icone nome="check" tamanho={15} traco={2.4} />}
+            </button>
+          ))}
+          {erro && <div className="alert alert-danger" style={{ margin: 6, fontSize: 12.5 }}><span>{erro}</span></div>}
+          <div className="sep" />
+          <a href="#/empresas" role="menuitem" onClick={() => setAberto(false)}><Icone nome="predio" tamanho={15} /> Gerenciar empresas</a>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function ErpApp({ perfil, onSair, onEmpresaTrocada }) {
   const perm = useMemo(() => permissoes(perfil), [perfil]);
   const visiveis = useMemo(() => MODULOS.filter((m) => !m.visivel || m.visivel(perm)), [perm]);
   const [rota, setRota] = useState(lerRota);
@@ -154,13 +221,7 @@ export default function ErpApp({ perfil, onSair }) {
       <div className={`sidebar-overlay${menuAberto ? " aberta" : ""}`} onClick={() => setMenuAberto(false)} />
 
       <aside className={`sidebar${menuAberto ? " aberta" : ""}`} aria-label="Menu principal">
-        <div className="brand">
-          <Marca />
-          <div style={{ minWidth: 0 }}>
-            <div className="brand-name">EklesiaHub</div>
-            <div className="brand-empresa" title={perfil.empresa_nome}>{perfil.empresa_nome}</div>
-          </div>
-        </div>
+        <SeletorEmpresa perfil={perfil} plataforma={perm.plataforma} onTrocada={onEmpresaTrocada} />
 
         <nav className="nav">
           {grupos.filter((g) => g !== "Sistema").map((g) => (

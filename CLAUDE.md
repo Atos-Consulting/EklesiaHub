@@ -24,7 +24,7 @@ O EklesiaHub hoje é **só um ERP multiempresa de igreja** (o `README.md` ainda 
 ### Multiempresa e permissões
 
 - Toda tabela do ERP tem `empresa_id`, RLS por `minha_empresa_id()` e FKs compostas `(id, empresa_id)`, para nenhum registro apontar para outra empresa. Unicidades são por empresa.
-- Níveis: Usuário < Supervisor < Administrador (da empresa). À parte existe o `profiles.plataforma_admin`, que cria e gerencia empresas mas **não vê dados de negócio**.
+- Níveis: Usuário < Supervisor < Administrador (da empresa). À parte existe o `profiles.plataforma_admin`, que cria e gerencia empresas e pode **trocar de empresa** (clicando no nome da empresa no menu): a escolha fica em `profiles.empresa_atual_id`, `minha_empresa_id()`/`meu_nivel()` passam a devolver essa empresa e o nível Administrador, e o `profiles.empresa_id` (empresa de origem) não muda.
 - A matriz de permissões fica duplicada de propósito: o banco (RLS e gatilhos) é a fonte da verdade, e `src/erp/permissoes.js` só decide o que mostrar. Mudou uma, mude a outra.
 - Usuários são criados e alterados por RPCs (`criar_usuario`, `atualizar_usuario`, `redefinir_senha_usuario`, `criar_empresa`...) que escrevem direto em `auth.users`/`auth.identities`. Conta nova nasce sem empresa e sem nível, ou seja, sem acesso.
 
@@ -41,7 +41,7 @@ O catálogo fica em `src/erp/catalogoParametros.js`. **Não** chame o arquivo de
 
 ## Migrations
 
-Arquivos SQL soltos na raiz, rodados **à mão no SQL Editor** em ordem: `schema.sql` → `migration_v2` → `v3` (Kids) → `v4_erp` → `v5_multiempresa` → `v6_parametros_fiscal` → `v7_niveis_usuarios` → `v8_financeiro`. Não presuma que a última já foi aplicada no banco real. A UI que depende dela quebra até ser aplicada. Teste migrations novas com dados legados já aprovados, porque os gatilhos de imutabilidade podem barrar o backfill.
+Arquivos SQL soltos na raiz, rodados **à mão no SQL Editor** em ordem: `schema.sql` → `migration_v2` → `v3` (Kids) → `v4_erp` → `v5_multiempresa` → `v6_parametros_fiscal` → `v7_niveis_usuarios` → `v8_financeiro` → `v9_trocar_empresa`. Não presuma que a última já foi aplicada no banco real. A UI que depende dela quebra até ser aplicada. Teste migrations novas com dados legados já aprovados, porque os gatilhos de imutabilidade podem barrar o backfill.
 
 ## BMAD
 
