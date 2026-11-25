@@ -410,6 +410,28 @@ export async function carregarExtrato(contaId, { de, ate }) {
   return { linhas: linhas.data, saldoAnterior: Number(anterior.data ?? 0) };
 }
 
+// Fluxo de caixa: realizado (extrato), saldo de cada conta antes do período e os títulos em aberto (previsto).
+// contaIds: as contas consideradas (todas, ou uma só).
+export async function carregarFluxo(contaIds, { de, ate }) {
+  const diaAntes = new Date(`${de}T12:00:00Z`);
+  diaAntes.setUTCDate(diaAntes.getUTCDate() - 1);
+  const antes = diaAntes.toISOString().slice(0, 10);
+  let extrato = supabase.from("extrato_caixa").select("*").gte("data", de).lte("data", ate);
+  if (contaIds.length === 1) extrato = extrato.eq("conta_caixa_id", contaIds[0]);
+  const [linhas, pagar, receber, ...saldos] = await Promise.all([
+    extrato.order("data").order("criado_em").limit(10000),
+    supabase.from("titulos_pagar").select("*").eq("status", "aberto").lte("vencimento", ate).order("vencimento").limit(5000),
+    supabase.from("titulos_receber").select("*").eq("status", "aberto").lte("vencimento", ate).order("vencimento").limit(5000),
+    ...contaIds.map((id) => supabase.rpc("saldo_caixa_ate", { p_conta: id, p_data: antes })),
+  ]);
+  const erro = [linhas, pagar, receber, ...saldos].find((r) => r.error)?.error;
+  if (erro) throw erro;
+  return {
+    linhas: linhas.data, pagar: pagar.data, receber: receber.data,
+    saldoInicial: saldos.reduce((acc, r) => acc + Math.round(Number(r.data ?? 0) * 100), 0) / 100,
+  };
+}
+
 export async function listarMovimentos({ de, ate }) {
   let consulta = supabase.from("movimentos_caixa_lista").select("*");
   if (de) consulta = consulta.gte("data", de);

@@ -6,6 +6,7 @@ import NotasEntrada from "./NotasEntrada";
 import ContasPagar from "./ContasPagar";
 import Entradas from "./Entradas";
 import MovimentosCaixa from "./MovimentosCaixa";
+import FluxoCaixa from "./FluxoCaixa";
 import Logs from "./Logs";
 import Fornecedores from "./Fornecedores";
 import ImportarXml from "./ImportarXml";
@@ -28,7 +29,7 @@ const MODULOS = [
     telas: [{ id: "notas", rotulo: "Notas de entrada" }, { id: "fornecedores", rotulo: "Fornecedores" }, { id: "importar", rotulo: "Importar XML" }] },
   // Contas a pagar e a receber (mesma tela, por aba de situação), entradas (dízimos, ofertas, campanhas) e caixa (extrato e movimentos).
   { id: "financeiro", grupo: "Gestão", rotulo: "Financeiro", icone: "carteira", pronto: true,
-    telas: [{ id: "pagar", rotulo: "Contas a pagar" }, { id: "receber", rotulo: "Contas a receber" }, { id: "entradas", rotulo: "Dízimos e ofertas" }, { id: "caixa", rotulo: "Movimentos de caixa" }] },
+    telas: [{ id: "pagar", rotulo: "Contas a pagar" }, { id: "receber", rotulo: "Contas a receber" }, { id: "entradas", rotulo: "Dízimos e ofertas" }, { id: "caixa", rotulo: "Movimentos de caixa" }, { id: "fluxo", rotulo: "Fluxo de caixa" }] },
   { id: "contabil", grupo: "Gestão", rotulo: "Contábil", icone: "calculadora", pronto: false, contabil: true,
     descricao: "Escrituração contábil integrada aos demais módulos.",
     previsto: ["Plano de contas editável", "Lançamentos em partidas dobradas", "Razão e balancete", "DRE e balanço patrimonial", "Contabilização automática das notas aprovadas"] },
@@ -191,6 +192,7 @@ export default function ErpApp({ perfil, onSair, onEmpresaTrocada }) {
     if (modulo.id === "logs") return <Logs />;
     if (modulo.id === "financeiro") {
       if (tela?.id === "entradas") return <Entradas cadastros={cadastros} podeRegistrar={perm.pagar} onCadastrosMudaram={recarregarCadastros} />;
+      if (tela?.id === "fluxo") return <FluxoCaixa cadastros={cadastros} />;
       if (tela?.id === "caixa") return <MovimentosCaixa cadastros={cadastros} podeRegistrar={perm.pagar} onCadastrosMudaram={recarregarCadastros} />;
       return <ContasPagar key={tela?.id} natureza={tela?.id === "receber" ? "receber" : "pagar"} cadastros={cadastros} podePagar={perm.pagar} onCadastrosMudaram={recarregarCadastros} />;
     }
