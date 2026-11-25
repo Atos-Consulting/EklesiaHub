@@ -27,3 +27,6 @@ dist-ssr
 
 # Google Drive
 desktop.ini
+
+# Arquivos temporários do Supabase CLI
+supabase/
