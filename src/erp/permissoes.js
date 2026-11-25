@@ -8,11 +8,11 @@ export const NIVEIS = {
   },
   supervisor: {
     rotulo: "Supervisor",
-    descricao: "Lança, aprova e cancela notas, registra pagamentos, dízimos e ofertas no Financeiro e gerencia usuários do seu nível para baixo (Supervisor e Usuário). Não acessa parâmetros.",
+    descricao: "Lança, aprova e cancela notas, registra pagamentos, dízimos, ofertas e movimentos de caixa no Financeiro e gerencia usuários do seu nível para baixo (Supervisor e Usuário). Não acessa parâmetros.",
   },
   usuario: {
     rotulo: "Usuário",
-    descricao: "Lança e edita rascunhos e cadastra fornecedores. Consulta o Financeiro, mas não aprova notas nem registra pagamentos, dízimos ou ofertas.",
+    descricao: "Lança e edita rascunhos e cadastra fornecedores. Consulta o Financeiro, mas não aprova notas nem registra pagamentos, dízimos, ofertas ou movimentos de caixa.",
   },
 };
 

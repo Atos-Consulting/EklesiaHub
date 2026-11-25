@@ -363,6 +363,43 @@ export async function estornarEntrada(entradaId, motivo) {
   if (error) throw error;
 }
 
+// ── Movimentos de caixa e extrato (v13) ──────────────────────────
+
+// Extrato de uma conta no período, mais o saldo ao fim do dia anterior ao período.
+export async function carregarExtrato(contaId, { de, ate }) {
+  const diaAntes = new Date(`${de}T12:00:00Z`);
+  diaAntes.setUTCDate(diaAntes.getUTCDate() - 1);
+  const [linhas, anterior] = await Promise.all([
+    supabase.from("extrato_caixa").select("*").eq("conta_caixa_id", contaId).gte("data", de).lte("data", ate)
+      .order("data").order("criado_em").order("ref_id").limit(5000),
+    supabase.rpc("saldo_caixa_ate", { p_conta: contaId, p_data: diaAntes.toISOString().slice(0, 10) }),
+  ]);
+  if (linhas.error) throw linhas.error;
+  if (anterior.error) throw anterior.error;
+  return { linhas: linhas.data, saldoAnterior: Number(anterior.data ?? 0) };
+}
+
+export async function listarMovimentos({ de, ate }) {
+  let consulta = supabase.from("movimentos_caixa_lista").select("*");
+  if (de) consulta = consulta.gte("data", de);
+  if (ate) consulta = consulta.lte("data", ate);
+  const { data, error } = await consulta.order("data", { ascending: false }).order("id", { ascending: false }).limit(3000);
+  if (error) throw error;
+  return data;
+}
+
+// dados: { tipo, data, valor, conta_origem_id, conta_destino_id, descricao, centro_custo_id }
+export async function registrarMovimento(dados) {
+  const { data, error } = await supabase.rpc("registrar_movimento", { p_dados: dados });
+  if (error) throw error;
+  return data;
+}
+
+export async function estornarMovimento(movimentoId, motivo) {
+  const { error } = await supabase.rpc("estornar_movimento", { p_movimento: movimentoId, p_motivo: motivo.trim() });
+  if (error) throw error;
+}
+
 
 // ── Anexos ───────────────────────────────────────────────────────
 

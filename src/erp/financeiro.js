@@ -13,6 +13,13 @@ export const FORMAS_PAGAMENTO = {
 export const TIPOS_ENTRADA = { dizimo: "Dízimo", oferta: "Oferta", campanha: "Campanha", outra: "Outra entrada" };
 export const FORMAS_RECEBIMENTO = Object.fromEntries(Object.entries(FORMAS_PAGAMENTO).filter(([k]) => k !== "boleto"));
 
+// Movimentos de caixa (v13) e as origens das linhas do extrato (view extrato_caixa).
+export const TIPOS_MOVIMENTO = { transferencia: "Transferência", saida: "Saída avulsa", entrada: "Entrada avulsa" };
+export const ORIGENS_EXTRATO = {
+  entrada: "Dízimo / oferta", pagamento: "Pagamento", transferencia_saida: "Transferência enviada",
+  transferencia_entrada: "Transferência recebida", saida: "Saída avulsa", entrada_avulsa: "Entrada avulsa",
+};
+
 export const ORIGEM_PAGAMENTO = { manual: "Baixa no Financeiro", aprovacao: "À vista, na aprovação", migracao: "Nota anterior ao Financeiro" };
 
 // "3x · 1ª em 30 dias, a cada 30 dias"

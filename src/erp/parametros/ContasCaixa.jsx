@@ -48,7 +48,7 @@ export default function ContasCaixa({ cadastros, onCadastrosMudaram }) {
             <ThOrdenavel chave="conta" ordenacao={ordenacao}>Conta contábil</ThOrdenavel>
             <ThOrdenavel chave="inicial" ordenacao={ordenacao} className="num">Saldo inicial</ThOrdenavel>
             <ThOrdenavel chave="entradas" ordenacao={ordenacao} className="num">Entradas</ThOrdenavel>
-            <ThOrdenavel chave="saidas" ordenacao={ordenacao} className="num">Saídas (pagamentos)</ThOrdenavel>
+            <ThOrdenavel chave="saidas" ordenacao={ordenacao} className="num">Saídas</ThOrdenavel>
             <ThOrdenavel chave="saldo" ordenacao={ordenacao} className="num">Saldo atual</ThOrdenavel>
             <ThOrdenavel chave="situacao" ordenacao={ordenacao}>Situação</ThOrdenavel>
             <th className="acoes"><span className="sr-only">Ações</span></th>
