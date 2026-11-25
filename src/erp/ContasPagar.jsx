@@ -5,11 +5,27 @@ import Icone from "./Icone";
 import Modal from "./Modal";
 import ThOrdenavel from "./ThOrdenavel";
 import { useOrdenacao } from "./useOrdenacao";
-import { listarTitulosPagar, listarPagamentosDoTitulo, pagarTitulo, estornarPagamento, atualizarTitulo, mensagemErro } from "./db";
+import { listarTitulosPagar, listarTitulosReceber, listarPagamentosDoTitulo, pagarTitulo, receberTitulo, estornarPagamento, atualizarTitulo, mensagemErro } from "./db";
+import { NovaContaReceber, CancelarContaReceber } from "./NovaContaReceber";
 import { formatarMoeda, formatarData, hojeISO, lerNumero, paraCentavos, deCentavos, somarValores, mascararDocumento } from "./format";
 import { FORMAS_PAGAMENTO, ORIGEM_PAGAMENTO, situacaoTitulo, somarDias } from "./financeiro";
 
-// Uma tela só para contas a pagar e contas pagas: a aba escolhe a situação.
+// Mesma tela para contas a pagar (geradas pelas notas) e contas a receber (lançadas aqui): a aba escolhe a situação.
+// Os textos de cada lado ficam em TEXTOS; os dados vêm das views titulos_pagar e titulos_receber (mesmas colunas).
+const TEXTOS = {
+  pagar: {
+    titulo: "Contas a pagar", pessoa: "Fornecedor", buscar: "Fornecedor ou documento", pagas: "Pagas", pagosMes: "Pagos no mês",
+    acao: "Pagar", feito: "Pago", baixa: "Pagamento", baixas: "Pagamentos", dados: "Dados para pagamento",
+    subtitulo: "Lançamentos gerados pela aprovação das notas de entrada, conforme a condição de pagamento. Clique em um lançamento para ver ou completar os dados de pagamento (boleto, PIX, banco); ao pagar, o valor sai da conta caixa escolhida.",
+    vazio: "Nenhuma conta a pagar ainda. Elas aparecem quando uma nota de entrada é aprovada.",
+  },
+  receber: {
+    titulo: "Contas a receber", pessoa: "Pagador", buscar: "Pagador ou descrição", pagas: "Recebidas", pagosMes: "Recebidos no mês",
+    acao: "Receber", feito: "Recebido", baixa: "Recebimento", baixas: "Recebimentos", dados: "Dados para recebimento",
+    subtitulo: "Valores que a igreja tem a receber (aluguel do espaço, eventos, repasses), em uma ou mais parcelas. Clique em uma conta para ver ou completar os dados; ao receber, o valor entra na conta caixa escolhida. Parcela em aberto pode ser cancelada, com motivo.",
+    vazio: "Nenhuma conta a receber ainda. Use “Nova conta a receber” para lançar.",
+  },
+};
 const SITUACOES = [
   { id: "abertos", rotulo: "Em aberto" }, { id: "vencido", rotulo: "Vencidas" }, { id: "semana", rotulo: "Vencem em 7 dias" },
   { id: "pago", rotulo: "Pagas" }, { id: "cancelado", rotulo: "Canceladas" }, { id: "todos", rotulo: "Todas" },
@@ -39,18 +55,20 @@ function Indicador({ icone, tom = "", rotulo, valor, sub }) {
   );
 }
 
-export default function ContasPagar({ cadastros, podePagar, onCadastrosMudaram }) {
+export default function ContasPagar({ natureza = "pagar", cadastros, podePagar, onCadastrosMudaram }) {
+  const T = TEXTOS[natureza];
+  const receber = natureza === "receber";
   const [titulos, setTitulos] = useState(null);
   const [erro, setErro] = useState("");
   const [filtros, setFiltros] = useState(FILTROS_VAZIOS);
   const [situacao, setSituacao] = useState("abertos");
-  const [acao, setAcao] = useState(null); // { tipo: "pagar" | "estornar" | "ver", titulo }
+  const [acao, setAcao] = useState(null); // { tipo: "pagar" | "estornar" | "ver" | "nova" | "cancelar", titulo }
   const hoje = hojeISO();
   const emSete = somarDias(hoje, 7);
 
   const recarregar = useCallback(
-    () => listarTitulosPagar().then((d) => { setTitulos(d); setErro(""); }).catch((e) => setErro(mensagemErro(e))),
-    [],
+    () => (receber ? listarTitulosReceber() : listarTitulosPagar()).then((d) => { setTitulos(d); setErro(""); }).catch((e) => setErro(mensagemErro(e))),
+    [receber],
   );
   useEffect(() => { recarregar(); }, [recarregar]);
   const aoConcluir = async () => { setAcao(null); await Promise.all([recarregar(), onCadastrosMudaram()]); };
@@ -99,14 +117,15 @@ export default function ContasPagar({ cadastros, podePagar, onCadastrosMudaram }
   return (
     <div>
       <div className="page-header">
-        <Header title="Contas a pagar" subtitle="Lançamentos gerados pela aprovação das notas de entrada, conforme a condição de pagamento. Clique em um lançamento para ver ou completar os dados de pagamento (boleto, PIX, banco); ao pagar, o valor sai da conta caixa escolhida." />
+        <Header title={T.titulo} subtitle={T.subtitulo} />
+        {receber && podePagar && <button className="btn btn-primary" onClick={() => setAcao({ tipo: "nova" })}><Icone nome="mais" tamanho={16} traco={2.2} /> Nova conta a receber</button>}
       </div>
 
       <div className="stat-grid">
         <Indicador icone="alerta" tom={indicadores.vencidos ? "perigo" : "neutro"} rotulo="Vencidos" valor={indicadores.vencidos} sub={indicadores.valorVencidos} />
         <Indicador icone="relogio" tom={indicadores.semana ? "alerta" : "neutro"} rotulo="Vencem em 7 dias" valor={indicadores.semana} sub={indicadores.valorSemana} />
         <Indicador icone="carteira" tom="neutro" rotulo="Total em aberto" valor={indicadores.abertos} sub={indicadores.valorAbertos} />
-        <Indicador icone="check" rotulo="Pagos no mês" valor={indicadores.pagosMes} sub={indicadores.valorPagosMes} />
+        <Indicador icone="check" rotulo={T.pagosMes} valor={indicadores.pagosMes} sub={indicadores.valorPagosMes} />
       </div>
 
       {erro && <div className="alert alert-danger" role="alert" style={{ marginBottom: 16 }}><Icone nome="alerta" tamanho={16} /><span>{erro}</span></div>}
@@ -114,9 +133,9 @@ export default function ContasPagar({ cadastros, podePagar, onCadastrosMudaram }
       <div className="card">
         <div className="toolbar">
           <label style={{ flex: "1 1 240px", maxWidth: 340 }}>Buscar
-            <input placeholder="Fornecedor ou documento" value={filtros.busca} onChange={f("busca")} style={inp} />
+            <input placeholder={T.buscar} value={filtros.busca} onChange={f("busca")} style={inp} />
           </label>
-          <label>{verPagas ? "Pagas de" : "Vencimento de"}
+          <label>{verPagas ? `${T.pagas} de` : "Vencimento de"}
             <input type="date" value={filtros.de} onChange={f("de")} style={{ ...inp, width: 156 }} />
           </label>
           <label>até
@@ -128,7 +147,7 @@ export default function ContasPagar({ cadastros, podePagar, onCadastrosMudaram }
         <div className="abas" role="tablist" aria-label="Situação dos lançamentos">
           {SITUACOES.map((s) => (
             <button key={s.id} type="button" role="tab" aria-selected={situacao === s.id} className={`aba${situacao === s.id ? " ativa" : ""}`} onClick={() => setSituacao(s.id)}>
-              {s.rotulo}<span className="contador">{porFiltro.filter((t) => naSituacao(t, s.id)).length}</span>
+              {s.id === "pago" ? T.pagas : s.rotulo}<span className="contador">{porFiltro.filter((t) => naSituacao(t, s.id)).length}</span>
             </button>
           ))}
         </div>
@@ -137,21 +156,21 @@ export default function ContasPagar({ cadastros, podePagar, onCadastrosMudaram }
           <table className="table">
             <thead><tr>
               <ThOrdenavel chave="vencimento" ordenacao={ordenacao}>Vencimento</ThOrdenavel>
-              <ThOrdenavel chave="fornecedor" ordenacao={ordenacao}>Fornecedor</ThOrdenavel>
-              <ThOrdenavel chave="documento" ordenacao={ordenacao}>Documento</ThOrdenavel>
+              <ThOrdenavel chave="fornecedor" ordenacao={ordenacao}>{T.pessoa}</ThOrdenavel>
+              <ThOrdenavel chave="documento" ordenacao={ordenacao}>{receber ? "Descrição" : "Documento"}</ThOrdenavel>
               <ThOrdenavel chave="parcela" ordenacao={ordenacao}>Parcela</ThOrdenavel>
               <ThOrdenavel chave="valor" ordenacao={ordenacao} className="num">Valor</ThOrdenavel>
               <ThOrdenavel chave="situacao" ordenacao={ordenacao}>Situação</ThOrdenavel>
-              <ThOrdenavel chave="pagamento" ordenacao={ordenacao}>Pagamento</ThOrdenavel>
+              <ThOrdenavel chave="pagamento" ordenacao={ordenacao}>{T.baixa}</ThOrdenavel>
               {podePagar && <th className="acoes"><span className="sr-only">Ações</span></th>}
             </tr></thead>
             <tbody>
               {titulos === null && !erro && <tr><td className="vazio" colSpan={colunas}>Carregando...</td></tr>}
               {titulos && filtrados.length === 0 && (
-                <tr><td className="vazio" colSpan={colunas}>{titulos.length === 0 ? "Nenhuma conta a pagar ainda. Elas aparecem quando uma nota de entrada é aprovada." : "Nenhum título encontrado com esses filtros."}</td></tr>
+                <tr><td className="vazio" colSpan={colunas}>{titulos.length === 0 ? T.vazio : "Nenhum título encontrado com esses filtros."}</td></tr>
               )}
               {ordenacao.ordenadas.map((t) => {
-                const sit = situacaoTitulo(t, hoje);
+                const sit = situacaoTitulo(t, hoje, natureza);
                 return (
                   <tr key={t.id} className="clicavel" tabIndex={0} style={t.status === "cancelado" ? { color: "var(--faint)" } : undefined}
                     onClick={() => setAcao({ tipo: "ver", titulo: t })} onKeyDown={(e) => { if (e.key === "Enter" && e.target === e.currentTarget) setAcao({ tipo: "ver", titulo: t }); }}>
@@ -165,7 +184,7 @@ export default function ContasPagar({ cadastros, podePagar, onCadastrosMudaram }
                     {podePagar && (
                       <td className="acoes" style={{ whiteSpace: "nowrap" }} onClick={(e) => e.stopPropagation()}>
                         {t.status === "aberto" && (
-                          <button type="button" className="btn btn-primary btn-sm" onClick={() => setAcao({ tipo: "pagar", titulo: t })}>Pagar</button>
+                          <button type="button" className="btn btn-primary btn-sm" onClick={() => setAcao({ tipo: "pagar", titulo: t })}>{T.acao}</button>
                         )}
                         {t.status === "pago" && t.pagamento_id && (
                           <button type="button" className="btn btn-ghost btn-sm" onClick={() => setAcao({ tipo: "estornar", titulo: t })}>Estornar</button>
@@ -181,18 +200,21 @@ export default function ContasPagar({ cadastros, podePagar, onCadastrosMudaram }
         {titulos && filtrados.length > 0 && (
           <div className="table-footer">
             <span>{filtrados.length} título(s){titulos.length >= 2000 && " · exibindo os 2000 primeiros"}</span>
-            <span>Em aberto: <strong>{formatarMoeda(totalAberto)}</strong>{totalPago > 0 && <> · Pago: <strong>{formatarMoeda(totalPago)}</strong></>}</span>
+            <span>Em aberto: <strong>{formatarMoeda(totalAberto)}</strong>{totalPago > 0 && <> · {T.feito}: <strong>{formatarMoeda(totalPago)}</strong></>}</span>
           </div>
         )}
       </div>
 
-      {acao?.tipo === "pagar" && <PagarModal titulo={acao.titulo} caixas={cadastros.caixas} pessoas={cadastros.pessoas} onFechar={() => setAcao(null)} onConcluido={aoConcluir} />}
+      {acao?.tipo === "pagar" && <PagarModal natureza={natureza} titulo={acao.titulo} caixas={cadastros.caixas} pessoas={cadastros.pessoas} onFechar={() => setAcao(null)} onConcluido={aoConcluir} />}
+      {acao?.tipo === "nova" && <NovaContaReceber cadastros={cadastros} onFechar={() => setAcao(null)} onConcluido={aoConcluir} onCadastrosMudaram={onCadastrosMudaram} />}
+      {acao?.tipo === "cancelar" && <CancelarContaReceber titulo={acao.titulo} onFechar={() => setAcao(null)} onConcluido={aoConcluir} />}
       {acao?.tipo === "estornar" && (
-        <EstornoModal descricao={`${acao.titulo.descricao} — parcela ${acao.titulo.parcela}/${acao.titulo.total_parcelas} · ${formatarMoeda(acao.titulo.valor_pago)}`}
+        <EstornoModal natureza={natureza} descricao={`${acao.titulo.descricao} — parcela ${acao.titulo.parcela}/${acao.titulo.total_parcelas} · ${formatarMoeda(acao.titulo.valor_pago)}`}
           pagamentoId={acao.titulo.pagamento_id} onFechar={() => setAcao(null)} onConcluido={aoConcluir} />
       )}
       {acao?.tipo === "ver" && (
-        <LancamentoModal titulo={acao.titulo} caixas={cadastros.caixas} podePagar={podePagar} onFechar={() => setAcao(null)}
+        <LancamentoModal natureza={natureza} titulo={acao.titulo} caixas={cadastros.caixas} podePagar={podePagar} onFechar={() => setAcao(null)}
+          onCancelar={() => setAcao({ tipo: "cancelar", titulo: acao.titulo })}
           onSalvo={async () => { await Promise.all([recarregar(), onCadastrosMudaram()]); }}
           onPagar={() => setAcao({ tipo: "pagar", titulo: acao.titulo })} onEstornar={() => setAcao({ tipo: "estornar", titulo: acao.titulo })} />
       )}
@@ -202,7 +224,9 @@ export default function ContasPagar({ cadastros, podePagar, onCadastrosMudaram }
 
 const valorCampo = (txt) => { const n = lerNumero(txt); return String(txt ?? "").trim() === "" ? 0 : n; };
 
-function PagarModal({ titulo: t, caixas, pessoas, onFechar, onConcluido }) {
+function PagarModal({ natureza, titulo: t, caixas, pessoas, onFechar, onConcluido }) {
+  const T = TEXTOS[natureza];
+  const receber = natureza === "receber";
   const ativas = caixas.filter((c) => c.ativo);
   const prevista = ativas.find((c) => c.id === t.conta_caixa_id);
   const [f, setF] = useState({
@@ -223,7 +247,8 @@ function PagarModal({ titulo: t, caixas, pessoas, onFechar, onConcluido }) {
   if (!f.data) erros.data = "Informe a data";
   else if (f.data > hojeISO()) erros.data = "Não pode ser futura";
   for (const k of ["juros", "multa", "desconto"]) if (!(valorCampo(f[k]) >= 0)) erros[k] = "Valor inválido";
-  if (!erros.desconto && totalCent <= 0) erros.desconto = "Maior que o valor a pagar";
+  if (!erros.desconto && totalCent <= 0) erros.desconto = receber ? "Maior que o valor a receber" : "Maior que o valor a pagar";
+  if (!erros.data && receber && caixa && f.data < caixa.data_saldo_inicial) erros.data = `Antes do saldo inicial da conta (${formatarData(caixa.data_saldo_inicial)})`;
 
   async function confirmar() {
     setTentou(true);
@@ -231,21 +256,21 @@ function PagarModal({ titulo: t, caixas, pessoas, onFechar, onConcluido }) {
     if (Object.keys(erros).length) return;
     setSalvando(true);
     try {
-      await pagarTitulo(t.id, { contaCaixaId: f.contaCaixaId, data: f.data, juros, multa, desconto, observacao: f.observacao });
+      await (receber ? receberTitulo : pagarTitulo)(t.id, { contaCaixaId: f.contaCaixaId, data: f.data, juros, multa, desconto, observacao: f.observacao });
       await onConcluido();
     } catch (e) { setErro(mensagemErro(e)); setSalvando(false); }
   }
   const borda = (k) => (tentou && erros[k] ? { borderColor: "var(--danger)" } : {});
-  const saldoDepois = caixa ? deCentavos(paraCentavos(Number(caixa.saldo_atual)) - totalCent) : null;
+  const saldoDepois = caixa ? deCentavos(paraCentavos(Number(caixa.saldo_atual)) + (receber ? totalCent : -totalCent)) : null;
 
   return (
-    <Modal titulo="Registrar pagamento" largura={560} fecharFora={false} onFechar={onFechar}
+    <Modal titulo={`Registrar ${T.baixa.toLowerCase()}`} largura={560} fecharFora={false} onFechar={onFechar}
       rodape={<>
         <button className="btn btn-ghost" onClick={onFechar} disabled={salvando}>Cancelar</button>
-        <button className="btn btn-primary" onClick={confirmar} disabled={salvando}>{salvando ? "Registrando..." : Number.isFinite(totalCent) && totalCent > 0 ? `Pagar ${formatarMoeda(deCentavos(totalCent))}` : "Pagar"}</button>
+        <button className="btn btn-primary" onClick={confirmar} disabled={salvando}>{salvando ? "Registrando..." : Number.isFinite(totalCent) && totalCent > 0 ? `${T.acao} ${formatarMoeda(deCentavos(totalCent))}` : T.acao}</button>
       </>}>
       <div className="resumo-pagar" style={{ marginTop: 0 }}>
-        <span>Fornecedor: <strong>{t.fornecedor_nome}</strong>{fornecedor?.documento ? ` · ${mascararDocumento(fornecedor.tipo_pessoa, fornecedor.documento)}` : ""}</span>
+        <span>{T.pessoa}: <strong>{t.fornecedor_nome}</strong>{fornecedor?.documento ? ` · ${mascararDocumento(fornecedor.tipo_pessoa, fornecedor.documento)}` : ""}</span>
         <span>{t.descricao} · parcela <strong>{t.parcela}/{t.total_parcelas}</strong></span>
         <span>Vencimento: <strong style={t.vencimento < hojeISO() ? { color: "var(--danger)" } : undefined}>{formatarData(t.vencimento)}</strong></span>
         <span>Valor da parcela: <strong>{formatarMoeda(t.valor)}</strong></span>
@@ -254,7 +279,7 @@ function PagarModal({ titulo: t, caixas, pessoas, onFechar, onConcluido }) {
       <form onSubmit={(e) => { e.preventDefault(); confirmar(); }} noValidate>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "0 12px" }}>
           <div>
-            <label style={lbl} htmlFor="pg-caixa">Conta caixa (de onde sai) *</label>
+            <label style={lbl} htmlFor="pg-caixa">{receber ? "Conta caixa (onde entra) *" : "Conta caixa (de onde sai) *"}</label>
             <select id="pg-caixa" autoFocus style={{ ...inp, ...borda("contaCaixaId") }} value={f.contaCaixaId} onChange={set("contaCaixaId")}>
               <option value="">— Selecione —</option>
               {ativas.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
@@ -263,7 +288,7 @@ function PagarModal({ titulo: t, caixas, pessoas, onFechar, onConcluido }) {
               : caixa && <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>Saldo: {formatarMoeda(caixa.saldo_atual)} → depois: <strong style={{ color: saldoDepois < 0 ? "var(--danger)" : "var(--text)" }}>{formatarMoeda(saldoDepois)}</strong></div>}
           </div>
           <div>
-            <label style={lbl} htmlFor="pg-data">Data do pagamento *</label>
+            <label style={lbl} htmlFor="pg-data">Data do {T.baixa.toLowerCase()} *</label>
             <input id="pg-data" type="date" max={hojeISO()} style={{ ...inp, ...borda("data") }} value={f.data} onChange={set("data")} />
             {tentou && erros.data && <div style={msgErro}>{erros.data}</div>}
           </div>
@@ -285,14 +310,15 @@ function PagarModal({ titulo: t, caixas, pessoas, onFechar, onConcluido }) {
         <div><span>Parcela</span><span>{formatarMoeda(t.valor)}</span></div>
         {juros + multa > 0 && <div><span>(+) Juros e multa</span><span>{formatarMoeda(juros + multa)}</span></div>}
         {desconto > 0 && <div><span>(−) Desconto</span><span>{formatarMoeda(desconto)}</span></div>}
-        <div className="final"><span>Total pago</span><span>{Number.isFinite(totalCent) ? formatarMoeda(deCentavos(totalCent)) : "—"}</span></div>
+        <div className="final"><span>Total {receber ? "recebido" : "pago"}</span><span>{Number.isFinite(totalCent) ? formatarMoeda(deCentavos(totalCent)) : "—"}</span></div>
       </div>
       {erro && <div className="alert alert-danger" role="alert" style={{ marginTop: 16 }}><Icone nome="alerta" tamanho={16} /><span>{erro}</span></div>}
     </Modal>
   );
 }
 
-export function EstornoModal({ descricao, pagamentoId, onFechar, onConcluido }) {
+export function EstornoModal({ natureza = "pagar", descricao, pagamentoId, onFechar, onConcluido }) {
+  const receber = natureza === "receber";
   const [motivo, setMotivo] = useState("");
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
@@ -305,13 +331,13 @@ export function EstornoModal({ descricao, pagamentoId, onFechar, onConcluido }) 
     catch (e) { setErro(mensagemErro(e)); setSalvando(false); }
   }
   return (
-    <Modal titulo="Estornar pagamento" largura={480} nivel={400} fecharFora={false} onFechar={onFechar}
+    <Modal titulo={receber ? "Estornar recebimento" : "Estornar pagamento"} largura={480} nivel={400} fecharFora={false} onFechar={onFechar}
       rodape={<>
         <button className="btn btn-ghost" onClick={onFechar} disabled={salvando}>Voltar</button>
         <button className="btn btn-danger" style={{ opacity: valido ? 1 : 0.5 }} disabled={!valido || salvando} onClick={confirmar}>{salvando ? "Estornando..." : "Estornar"}</button>
       </>}>
       <p style={{ fontSize: 13.5, color: "var(--text-2)", margin: "4px 0 0" }}>
-        <strong>{descricao}</strong>. O valor volta para a conta caixa e a parcela fica em aberto de novo. O estorno fica registrado. Informe o motivo:
+        <strong>{descricao}</strong>. {receber ? "O valor sai da conta caixa" : "O valor volta para a conta caixa"} e a parcela fica em aberto de novo. O estorno fica registrado. Informe o motivo:
       </p>
       <textarea autoFocus style={{ ...inp, minHeight: 70, marginTop: 8, marginBottom: 8, fontFamily: "inherit" }} value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ex.: pago na conta errada (mín. 5 caracteres)" />
       {erro && <div className="alert alert-danger" role="alert" style={{ marginBottom: 8 }}><Icone nome="alerta" tamanho={16} /><span>{erro}</span></div>}
@@ -339,7 +365,9 @@ function Copiar({ texto }) {
 }
 
 // Lançamento (título a pagar): dados da nota, vencimento e dados de pagamento, e o histórico de pagamentos.
-function LancamentoModal({ titulo: t, caixas, podePagar, onFechar, onSalvo, onPagar, onEstornar }) {
+function LancamentoModal({ natureza, titulo: t, caixas, podePagar, onFechar, onSalvo, onPagar, onEstornar, onCancelar }) {
+  const T = TEXTOS[natureza];
+  const receber = natureza === "receber";
   const editavel = podePagar && t.status === "aberto";
   const [f, setF] = useState({
     vencimento: t.vencimento, forma_pagamento: t.forma_pagamento ?? "", linha_digitavel: formatarLinha(t.linha_digitavel),
@@ -350,7 +378,7 @@ function LancamentoModal({ titulo: t, caixas, podePagar, onFechar, onSalvo, onPa
   const [erro, setErro] = useState("");
   const [ok, setOk] = useState(false);
   const set = (k) => (e) => { setOk(false); setF((p) => ({ ...p, [k]: e.target.value })); };
-  const sit = situacaoTitulo(t, hojeISO());
+  const sit = situacaoTitulo(t, hojeISO(), natureza);
   const digitos = f.linha_digitavel.replace(/\D/g, "");
   const erroLinha = digitos && (digitos.length < 44 || digitos.length > 48) ? `A linha tem de 44 a 48 números (tem ${digitos.length})` : "";
   const mostra = (forma, campo) => f.forma_pagamento === forma || Boolean(f[campo]);
@@ -381,20 +409,21 @@ function LancamentoModal({ titulo: t, caixas, podePagar, onFechar, onSalvo, onPa
   return (
     <Modal titulo={`${t.descricao} · parcela ${t.parcela}/${t.total_parcelas}`} extra={<Pill tone={sit.tom}>{sit.rotulo}</Pill>} largura={720} fecharFora={false} onFechar={onFechar}
       rodape={<>
-        {podePagar && t.status === "pago" && t.pagamento_id && <button className="btn btn-ghost" style={{ marginRight: "auto", color: "var(--danger)", borderColor: "var(--danger-border)" }} onClick={onEstornar}>Estornar pagamento</button>}
+        {podePagar && t.status === "pago" && t.pagamento_id && <button className="btn btn-ghost" style={{ marginRight: "auto", color: "var(--danger)", borderColor: "var(--danger-border)" }} onClick={onEstornar}>Estornar {T.baixa.toLowerCase()}</button>}
+        {podePagar && receber && t.status === "aberto" && <button className="btn btn-ghost" style={{ marginRight: "auto", color: "var(--danger)", borderColor: "var(--danger-border)" }} onClick={onCancelar}>Cancelar parcela</button>}
         {ok && <span className="pill pill-ok">Salvo</span>}
         <button className="btn btn-ghost" onClick={onFechar} disabled={salvando}>Fechar</button>
         {editavel && <button className="btn btn-ghost" style={{ borderColor: "var(--primary)", color: "var(--primary-hover)" }} onClick={salvar} disabled={salvando}>{salvando ? "Salvando..." : "Salvar"}</button>}
-        {editavel && <button className="btn btn-primary" onClick={onPagar} disabled={salvando}>Pagar</button>}
+        {editavel && <button className="btn btn-primary" onClick={onPagar} disabled={salvando}>{T.acao}</button>}
       </>}>
       <div className="resumo-pagar" style={{ marginTop: 0 }}>
-        <span>Fornecedor: <strong>{t.fornecedor_nome}</strong>{t.fornecedor_documento ? ` · ${mascararDocumento(t.fornecedor_tipo, t.fornecedor_documento)}` : ""}</span>
+        <span>{T.pessoa}: <strong>{t.fornecedor_nome}</strong>{t.fornecedor_documento ? ` · ${mascararDocumento(t.fornecedor_tipo, t.fornecedor_documento)}` : ""}</span>
         <span>Emissão: <strong>{formatarData(t.emissao)}</strong></span>
         <span>Valor: <strong>{formatarMoeda(t.valor)}</strong></span>
         {t.motivo_cancelamento && <span>Cancelado: <strong>{t.motivo_cancelamento}</strong></span>}
       </div>
 
-      <h3 className="section-title">Dados para pagamento</h3>
+      <h3 className="section-title">{T.dados}</h3>
       {editavel ? (
         <>
           <div style={grade}>
@@ -438,7 +467,7 @@ function LancamentoModal({ titulo: t, caixas, podePagar, onFechar, onSalvo, onPa
             </div>
           )}
           <label style={lbl} htmlFor="lc-obs">Observação</label>
-          <textarea id="lc-obs" style={{ ...inp, minHeight: 56, resize: "vertical", fontFamily: "inherit" }} maxLength={500} value={f.observacao} onChange={set("observacao")} placeholder="Ex.: boleto enviado por e-mail, falar com o financeiro do fornecedor" />
+          <textarea id="lc-obs" style={{ ...inp, minHeight: 56, resize: "vertical", fontFamily: "inherit" }} maxLength={500} value={f.observacao} onChange={set("observacao")} placeholder={receber ? "Ex.: cobrar por WhatsApp, contrato assinado em 10/01" : "Ex.: boleto enviado por e-mail, falar com o financeiro do fornecedor"} />
         </>
       ) : (
         <>
@@ -450,23 +479,23 @@ function LancamentoModal({ titulo: t, caixas, podePagar, onFechar, onSalvo, onPa
           {t.pix_chave && leitura("Chave PIX", t.pix_chave)}
           {(t.banco || t.agencia || t.conta) && <div style={grade}>{leitura("Banco", t.banco)}{leitura("Agência", t.agencia)}{leitura("Conta", t.conta)}</div>}
           {t.observacao && leitura("Observação", t.observacao)}
-          {!podePagar && t.status === "aberto" && <div className="muted" style={{ fontSize: 12.5, marginTop: 8 }}>Só Supervisor ou Administrador altera os dados de pagamento.</div>}
+          {!podePagar && t.status === "aberto" && <div className="muted" style={{ fontSize: 12.5, marginTop: 8 }}>Só Supervisor ou Administrador altera estes dados.</div>}
         </>
       )}
 
-      <h3 className="section-title">Pagamentos</h3>
+      <h3 className="section-title">{T.baixas}</h3>
       {historico === null && <div className="muted" style={{ fontSize: 13 }}>Carregando...</div>}
-      {historico && historico.length === 0 && <div className="muted" style={{ fontSize: 13 }}>Nenhum pagamento registrado.</div>}
+      {historico && historico.length === 0 && <div className="muted" style={{ fontSize: 13 }}>Nenhum {T.baixa.toLowerCase()} registrado.</div>}
       {historico && historico.length > 0 && (
         <table className="parcelas">
-          <thead><tr><th>Data</th><th>Conta caixa</th><th className="num">Valor pago</th><th>Origem</th><th>Situação</th></tr></thead>
+          <thead><tr><th>Data</th><th>Conta caixa</th><th className="num">Valor {receber ? "recebido" : "pago"}</th><th>Origem</th><th>Situação</th></tr></thead>
           <tbody>{historico.map((p) => (
             <tr key={p.id} style={p.estornado ? { color: "var(--faint)" } : undefined}>
               <td>{formatarData(p.data_pagamento)}</td>
               <td>{p.conta_caixa_id ? caixaNome(p.conta_caixa_id) : "—"}{p.observacao && <div className="muted" style={{ fontSize: 12 }}>{p.observacao}</div>}</td>
               <td className="num" style={p.estornado ? { textDecoration: "line-through" } : { fontWeight: 600 }}>{formatarMoeda(p.valor_pago)}</td>
               <td style={{ fontSize: 12.5 }}>{ORIGEM_PAGAMENTO[p.origem]}</td>
-              <td>{p.estornado ? <span title={p.motivo_estorno}><Pill tone="danger">Estornado</Pill><div className="muted" style={{ fontSize: 12, whiteSpace: "normal" }}>{p.motivo_estorno}</div></span> : <Pill tone="ok">Pago</Pill>}</td>
+              <td>{p.estornado ? <span title={p.motivo_estorno}><Pill tone="danger">Estornado</Pill><div className="muted" style={{ fontSize: 12, whiteSpace: "normal" }}>{p.motivo_estorno}</div></span> : <Pill tone="ok">{T.feito}</Pill>}</td>
             </tr>
           ))}</tbody>
         </table>

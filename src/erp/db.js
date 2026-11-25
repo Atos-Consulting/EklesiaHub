@@ -335,6 +335,37 @@ export async function pagarTitulo(tituloId, { contaCaixaId, data, juros, multa, 
   return id;
 }
 
+// ── Contas a receber (v14): mesmos títulos e baixas das contas a pagar ──
+
+export async function listarTitulosReceber() {
+  const { data, error } = await supabase.from("titulos_receber").select("*")
+    .order("vencimento").order("id").limit(2000);
+  if (error) throw error;
+  return data;
+}
+
+// dados: { pessoa_id, descricao, emissao, valor, valor_por, parcelas, primeiro_vencimento, periodicidade, intervalo_dias,
+//          forma_pagamento, conta_caixa_id, centro_custo_id, observacao }
+export async function criarContasReceber(dados) {
+  const { data, error } = await supabase.rpc("criar_contas_receber", { p_dados: dados });
+  if (error) throw error;
+  return data;
+}
+
+export async function receberTitulo(tituloId, { contaCaixaId, data, juros, multa, desconto, observacao }) {
+  const { data: id, error } = await supabase.rpc("receber_titulo", {
+    p_titulo: tituloId, p_conta_caixa: Number(contaCaixaId), p_data: data,
+    p_juros: juros, p_multa: multa, p_desconto: desconto, p_observacao: observacao,
+  });
+  if (error) throw error;
+  return id;
+}
+
+export async function cancelarTituloReceber(tituloId, motivo) {
+  const { error } = await supabase.rpc("cancelar_titulo_receber", { p_titulo: tituloId, p_motivo: motivo.trim() });
+  if (error) throw error;
+}
+
 export async function estornarPagamento(pagamentoId, motivo) {
   const { error } = await supabase.rpc("estornar_pagamento", { p_pagamento: pagamentoId, p_motivo: motivo.trim() });
   if (error) throw error;

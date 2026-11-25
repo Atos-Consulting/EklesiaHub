@@ -12,7 +12,8 @@ import { TIPOS_MOVIMENTO, ORIGENS_EXTRATO, somarDias } from "./financeiro";
 const inicioDoMes = () => `${hojeISO().slice(0, 8)}01`;
 const VISOES = [{ id: "extrato", rotulo: "Extrato da conta" }, { id: "movimentos", rotulo: "Movimentos registrados" }];
 // Tela de onde veio cada linha do extrato que não é movimento de caixa.
-const TELA_ORIGEM = { entrada: "#/financeiro/entradas", pagamento: "#/financeiro/pagar" };
+const TELA_ORIGEM = { entrada: "#/financeiro/entradas", pagamento: "#/financeiro/pagar", recebimento: "#/financeiro/receber" };
+const NOME_TELA = { entrada: "Dízimos e ofertas", pagamento: "Contas a pagar", recebimento: "Contas a receber" };
 const ehMovimento = (origem) => !TELA_ORIGEM[origem];
 
 const COLUNAS_EXTRATO = {
@@ -171,7 +172,7 @@ export default function MovimentosCaixa({ cadastros, podeRegistrar, onCadastrosM
                     const abrir = () => (ehMovimento(l.origem) ? abrirMovimento(l.ref_id) : (window.location.hash = TELA_ORIGEM[l.origem]));
                     return (
                       <tr key={l.chave} className="clicavel" tabIndex={0} onClick={abrir} onKeyDown={(e) => { if (e.key === "Enter") abrir(); }}
-                        title={ehMovimento(l.origem) ? "Ver o movimento" : `Abrir ${l.origem === "entrada" ? "Dízimos e ofertas" : "Contas a pagar"}`}>
+                        title={ehMovimento(l.origem) ? "Ver o movimento" : `Abrir ${NOME_TELA[l.origem]}`}>
                         <td>{formatarData(l.data)}</td>
                         <td className="truncate" style={{ maxWidth: 360 }}>{l.descricao}</td>
                         <td><Pill tone={l.valor > 0 ? "ok" : "neutral"}>{ORIGENS_EXTRATO[l.origem] ?? l.origem}</Pill></td>

@@ -26,9 +26,9 @@ const MODULOS = [
     previsto: ["Saldo de caixa e bancos", "Contas a pagar e a receber da semana", "Entradas x saídas do mês", "Resultado do período (superávit/déficit)", "Vendas da livraria e do bazar"] },
   { id: "administrativo", grupo: "Gestão", rotulo: "Administrativo", icone: "pasta", pronto: true,
     telas: [{ id: "notas", rotulo: "Notas de entrada" }, { id: "fornecedores", rotulo: "Fornecedores" }, { id: "importar", rotulo: "Importar XML" }] },
-  // Contas a pagar (a pagar e pagas, por aba de situação), entradas (dízimos, ofertas, campanhas) e caixa (extrato e movimentos).
+  // Contas a pagar e a receber (mesma tela, por aba de situação), entradas (dízimos, ofertas, campanhas) e caixa (extrato e movimentos).
   { id: "financeiro", grupo: "Gestão", rotulo: "Financeiro", icone: "carteira", pronto: true,
-    telas: [{ id: "pagar", rotulo: "Contas a pagar" }, { id: "entradas", rotulo: "Dízimos e ofertas" }, { id: "caixa", rotulo: "Movimentos de caixa" }] },
+    telas: [{ id: "pagar", rotulo: "Contas a pagar" }, { id: "receber", rotulo: "Contas a receber" }, { id: "entradas", rotulo: "Dízimos e ofertas" }, { id: "caixa", rotulo: "Movimentos de caixa" }] },
   { id: "contabil", grupo: "Gestão", rotulo: "Contábil", icone: "calculadora", pronto: false, contabil: true,
     descricao: "Escrituração contábil integrada aos demais módulos.",
     previsto: ["Plano de contas editável", "Lançamentos em partidas dobradas", "Razão e balancete", "DRE e balanço patrimonial", "Contabilização automática das notas aprovadas"] },
@@ -192,7 +192,7 @@ export default function ErpApp({ perfil, onSair, onEmpresaTrocada }) {
     if (modulo.id === "financeiro") {
       if (tela?.id === "entradas") return <Entradas cadastros={cadastros} podeRegistrar={perm.pagar} onCadastrosMudaram={recarregarCadastros} />;
       if (tela?.id === "caixa") return <MovimentosCaixa cadastros={cadastros} podeRegistrar={perm.pagar} onCadastrosMudaram={recarregarCadastros} />;
-      return <ContasPagar cadastros={cadastros} podePagar={perm.pagar} onCadastrosMudaram={recarregarCadastros} />;
+      return <ContasPagar key={tela?.id} natureza={tela?.id === "receber" ? "receber" : "pagar"} cadastros={cadastros} podePagar={perm.pagar} onCadastrosMudaram={recarregarCadastros} />;
     }
     const props = { cadastros, podeEditar: perm.lancar, podeAprovar: perm.aprovar, podeAdministrar: perm.administrar, onCadastrosMudaram: recarregarCadastros };
     if (tela?.id === "fornecedores") return <Fornecedores {...props} />;

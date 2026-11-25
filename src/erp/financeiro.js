@@ -18,7 +18,31 @@ export const TIPOS_MOVIMENTO = { transferencia: "Transferência", saida: "Saída
 export const ORIGENS_EXTRATO = {
   entrada: "Dízimo / oferta", pagamento: "Pagamento", transferencia_saida: "Transferência enviada",
   transferencia_entrada: "Transferência recebida", saida: "Saída avulsa", entrada_avulsa: "Entrada avulsa",
+  recebimento: "Recebimento",
 };
+
+// Contas a receber (v14): mesma conta de criar_contas_receber no banco — mudou uma, mude a outra.
+// Valor total: divide em centavos e a sobra vai para a 1ª parcela. Mensal: mesmo dia nos meses seguintes
+// (dia 31 vira o último dia dos meses mais curtos), sempre contado a partir do 1º vencimento.
+export function somarMeses(iso, meses) {
+  const [a, m, d] = iso.split("-").map(Number);
+  const alvo = new Date(Date.UTC(a, m - 1 + meses, 1));
+  const ultimo = new Date(Date.UTC(alvo.getUTCFullYear(), alvo.getUTCMonth() + 1, 0)).getUTCDate();
+  alvo.setUTCDate(Math.min(d, ultimo));
+  return alvo.toISOString().slice(0, 10);
+}
+export function parcelasReceber({ centavos, valorPor, parcelas, primeiroVencimento, periodicidade, intervaloDias }) {
+  if (!(centavos > 0) || !(parcelas >= 1 && parcelas <= 120) || !primeiroVencimento) return [];
+  if (periodicidade === "dias" && !(intervaloDias >= 1 && intervaloDias <= 365)) return [];
+  const base = valorPor === "parcela" ? centavos : Math.floor(centavos / parcelas);
+  if (base === 0) return [];
+  const resto = valorPor === "parcela" ? 0 : centavos - base * parcelas;
+  return Array.from({ length: parcelas }, (_, i) => ({
+    parcela: i + 1,
+    vencimento: periodicidade === "mensal" ? somarMeses(primeiroVencimento, i) : somarDias(primeiroVencimento, i * intervaloDias),
+    valor: deCentavos(base + (i === 0 ? resto : 0)),
+  }));
+}
 
 export const ORIGEM_PAGAMENTO = { manual: "Baixa no Financeiro", aprovacao: "À vista, na aprovação", migracao: "Nota anterior ao Financeiro" };
 
@@ -58,8 +82,8 @@ export function gerarParcelas(condicao, { emissao, entrada, centavos }) {
 }
 
 // Situação exibida de um título: em aberto vira "Vencido" depois do vencimento.
-export function situacaoTitulo(t, hoje) {
-  if (t.status === "pago") return { id: "pago", rotulo: "Pago", tom: "ok" };
+export function situacaoTitulo(t, hoje, natureza = "pagar") {
+  if (t.status === "pago") return { id: "pago", rotulo: natureza === "receber" ? "Recebido" : "Pago", tom: "ok" };
   if (t.status === "cancelado") return { id: "cancelado", rotulo: "Cancelado", tom: "neutral" };
   if (t.vencimento < hoje) return { id: "vencido", rotulo: "Vencido", tom: "danger" };
   if (t.vencimento === hoje) return { id: "hoje", rotulo: "Vence hoje", tom: "warn" };
