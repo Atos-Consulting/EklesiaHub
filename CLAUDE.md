@@ -42,6 +42,10 @@ O catálogo fica em `src/erp/catalogoParametros.js`. **Não** chame o arquivo de
 
 Arquivos SQL soltos na raiz, rodados **à mão no SQL Editor** em ordem: `schema.sql` → `migration_v2` → `v3` (Kids) → `v4_erp` → `v5_multiempresa` → `v6_parametros_fiscal` → `v7_niveis_usuarios`. Não presuma que a última já foi aplicada no banco real. A UI que depende dela quebra até ser aplicada. Teste migrations novas com dados legados já aprovados, porque os gatilhos de imutabilidade podem barrar o backfill.
 
+## BMAD
+
+O projeto tem o próprio `_bmad/` (`config.toml`: `output_folder = "{project-root}/docs"`). Os documentos dos agentes BMAD (PRD, arquitetura, épicos, histórias) vão para `docs/`, junto com o `docs/erp-blueprint.md`.
+
 ## Gotchas
 
 - **PostgREST com FK composta:** o embed pelo nome da coluna (`pessoas!fornecedor_id(...)`) dá `PGRST200`. Use o **nome da FK** (`pessoas!documentos_entrada_fornecedor_fk(...)`). Para conferir um embed ou uma RPC sem login, chame com a chave anon: `PGRST200` = relação ou RPC não existe; `42501` = existe, só falta autenticar.

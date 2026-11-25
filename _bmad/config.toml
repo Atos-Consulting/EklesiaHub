@@ -1,0 +1,3 @@
+[core]
+project_name = "EklesiaHub"
+output_folder = "{project-root}/docs"
