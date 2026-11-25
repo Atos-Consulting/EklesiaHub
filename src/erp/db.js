@@ -17,6 +17,9 @@ export function mensagemErro(e) {
   if (msg.includes("condicoes_pagamento_empresa_nome_uq")) return "Já existe uma condição de pagamento com este nome.";
   if (msg.includes("condicoes_pagamento_a_vista_ck")) return "Condição à vista tem uma parcela só, paga no ato.";
   if (msg.includes("pagamentos_ativo_uq")) return "Este título já foi pago.";
+  if (msg.includes("empresas_cep_check")) return "CEP inválido: informe os 8 números.";
+  if (msg.includes("empresas_email_check")) return "E-mail inválido.";
+  if (msg.includes("empresas_uf_check")) return "UF inválida: use a sigla do estado (ex.: SP).";
   if (msg.includes("tipos_contabeis_check")) return "A conta de débito e a de crédito precisam ser diferentes.";
   if (e?.code === "23503" && /(debito|credito|conta|caixa|tipo|condicao)_fk/.test(msg)) return "A conta escolhida não pertence a esta empresa. Atualize a página e tente de novo.";
   if (e?.code === "42501" || msg.includes("row-level security") || msg.includes("permission denied")) {
@@ -109,6 +112,29 @@ export async function listarEmpresas() {
     const deles = perfis.data.filter((p) => p.empresa_id === e.id);
     return { ...e, usuarios_ativos: deles.filter((p) => p.ativo).length, administradores: deles.filter((p) => p.ativo && p.nivel === "administrador").length };
   });
+}
+
+// Cadastro da igreja em que se está trabalhando.
+export async function buscarEmpresa(empresaId) {
+  const { data, error } = await supabase.from("empresas").select("*").eq("id", empresaId).single();
+  if (error) throw error;
+  return data;
+}
+
+// Nome fantasia, endereço e contatos da igreja atual (só o Administrador; o banco confere).
+export async function atualizarDadosEmpresa(dados) {
+  const { error } = await supabase.rpc("atualizar_dados_empresa", { p_dados: dados });
+  if (error) throw error;
+}
+
+// Log de criação/alteração/exclusão da igreja atual (só o Administrador lê).
+export async function listarLogs({ de, ate }) {
+  let consulta = supabase.from("logs").select("*").order("criado_em", { ascending: false }).order("id", { ascending: false }).limit(1000);
+  if (de) consulta = consulta.gte("criado_em", `${de}T00:00:00`);
+  if (ate) consulta = consulta.lte("criado_em", `${ate}T23:59:59.999`);
+  const { data, error } = await consulta;
+  if (error) throw error;
+  return data;
 }
 
 // Empresas ativas em que o administrador da plataforma pode trabalhar.
@@ -277,11 +303,17 @@ export async function listarTitulosPagar() {
   return data;
 }
 
-export async function listarPagamentos() {
-  const { data, error } = await supabase.from("pagamentos_lista").select("*")
-    .order("data_pagamento", { ascending: false }).order("id", { ascending: false }).limit(2000);
+// Histórico de pagamentos de um lançamento (inclusive os estornados).
+export async function listarPagamentosDoTitulo(tituloId) {
+  const { data, error } = await supabase.from("pagamentos_lista").select("*").eq("titulo_id", tituloId).order("id");
   if (error) throw error;
   return data;
+}
+
+// Vencimento e dados de pagamento (boleto, PIX, banco) de um lançamento em aberto.
+export async function atualizarTitulo(tituloId, dados) {
+  const { error } = await supabase.rpc("atualizar_titulo", { p_titulo: tituloId, p_dados: dados });
+  if (error) throw error;
 }
 
 export async function pagarTitulo(tituloId, { contaCaixaId, data, juros, multa, desconto, observacao }) {
@@ -298,10 +330,6 @@ export async function estornarPagamento(pagamentoId, motivo) {
   if (error) throw error;
 }
 
-export async function alterarVencimento(tituloId, vencimento) {
-  const { error } = await supabase.rpc("alterar_vencimento", { p_titulo: tituloId, p_vencimento: vencimento });
-  if (error) throw error;
-}
 
 // ── Anexos ───────────────────────────────────────────────────────
 

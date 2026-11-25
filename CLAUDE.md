@@ -24,7 +24,7 @@ O EklesiaHub hoje é **só um ERP multiempresa de igreja** (o `README.md` ainda 
 ### Multiempresa e permissões
 
 - Toda tabela do ERP tem `empresa_id`, RLS por `minha_empresa_id()` e FKs compostas `(id, empresa_id)`, para nenhum registro apontar para outra empresa. Unicidades são por empresa.
-- Níveis: Usuário < Supervisor < Administrador (da empresa). À parte existe o `profiles.plataforma_admin`, que cria e gerencia empresas e pode **trocar de empresa** (clicando no nome da empresa no menu): a escolha fica em `profiles.empresa_atual_id`, `minha_empresa_id()`/`meu_nivel()` passam a devolver essa empresa e o nível Administrador, e o `profiles.empresa_id` (empresa de origem) não muda.
+- Níveis: Usuário < Supervisor < Administrador (da empresa). À parte existe o `profiles.plataforma_admin`, que cria e gerencia empresas e pode **trocar de empresa** (clicando no nome da empresa no menu): a escolha fica em `profiles.empresa_atual_id`, `minha_empresa_id()`/`meu_nivel()` passam a devolver essa empresa e o nível Administrador, e o `profiles.empresa_id` (empresa de origem) não muda. Desde a v10 o administrador da plataforma não tem igreja de origem (`empresa_id`/`nivel` nulos): sem igreja escolhida, o `App` mostra a tela de escolha. Na interface, "empresa" aparece como **Igreja**.
 - A matriz de permissões fica duplicada de propósito: o banco (RLS e gatilhos) é a fonte da verdade, e `src/erp/permissoes.js` só decide o que mostrar. Mudou uma, mude a outra.
 - Usuários são criados e alterados por RPCs (`criar_usuario`, `atualizar_usuario`, `redefinir_senha_usuario`, `criar_empresa`...) que escrevem direto em `auth.users`/`auth.identities`. Conta nova nasce sem empresa e sem nível, ou seja, sem acesso.
 
@@ -35,13 +35,17 @@ O EklesiaHub hoje é **só um ERP multiempresa de igreja** (o `README.md` ainda 
 - Aprovar a nota gera os títulos do Financeiro (`titulos_financeiros`, contas a pagar) conforme a condição de pagamento, no valor **líquido** (total − retenções). À vista já nasce pago pela conta caixa da nota; parcelado fica em aberto até a baixa (`pagar_titulo`). O saldo da conta caixa desconta os **pagamentos** não estornados (`contas_caixa_saldo`). Títulos e pagamentos só são gravados por funções do banco; cancelar nota com parcela paga manualmente exige estornar antes. A prévia das parcelas na tela (`src/erp/financeiro.js`) repete a conta de `gerar_titulos_nota`: mudou uma, mude a outra.
 - Importar XML: `src/erp/ImportarXml.jsx` mais o leitor puro `src/erp/nfe.js` (NF-e 55 / NFC-e 65). Cada XML vira sempre um **rascunho**.
 
+### Logs
+
+O gatilho `registrar_log()` (v10) grava em `logs` toda criação, alteração (só os campos que mudaram, com de/para) e exclusão nas tabelas do ERP. Tabela nova do ERP precisa do gatilho `<tabela>_log_trg`. O log é só leitura (Administrador da igreja, em Sistema → Logs). Os itens da nota não são registrados, porque `salvar_nota_entrada` apaga e recria os itens a cada gravação.
+
 ### Parâmetros
 
 O catálogo fica em `src/erp/catalogoParametros.js`. **Não** chame o arquivo de `parametros.js`, que colide com `Parametros.jsx` no Windows. Parâmetro novo precisa de três coisas: regra em `parametros_valida()` no SQL, entrada no catálogo e bloco na tela.
 
 ## Migrations
 
-Arquivos SQL soltos na raiz, rodados **à mão no SQL Editor** em ordem: `schema.sql` → `migration_v2` → `v3` (Kids) → `v4_erp` → `v5_multiempresa` → `v6_parametros_fiscal` → `v7_niveis_usuarios` → `v8_financeiro` → `v9_trocar_empresa`. Não presuma que a última já foi aplicada no banco real. A UI que depende dela quebra até ser aplicada. Teste migrations novas com dados legados já aprovados, porque os gatilhos de imutabilidade podem barrar o backfill.
+Arquivos SQL soltos na raiz, rodados **à mão no SQL Editor** em ordem: `schema.sql` → `migration_v2` → `v3` (Kids) → `v4_erp` → `v5_multiempresa` → `v6_parametros_fiscal` → `v7_niveis_usuarios` → `v8_financeiro` → `v9_trocar_empresa` → `v10_cadastro_logs`. Não presuma que a última já foi aplicada no banco real. A UI que depende dela quebra até ser aplicada. Teste migrations novas com dados legados já aprovados, porque os gatilhos de imutabilidade podem barrar o backfill.
 
 ## BMAD
 

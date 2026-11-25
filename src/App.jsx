@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { getSession, getPerfil, signIn, signOut, onAuthChange } from "./auth";
+import { listarEmpresasAtivas, trocarEmpresa, mensagemErro } from "./erp/db";
 import ErpApp from "./erp/ErpApp";
 import Login from "./erp/Login";
 import Marca from "./erp/Marca";
@@ -30,6 +31,37 @@ function AvisoTela({ icone, titulo, texto, acoes }) {
           <p>{texto}</p>
           <div style={{ display: "flex", gap: 10, marginTop: 22 }}>{acoes}</div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// O administrador da plataforma não pertence a nenhuma igreja: se nenhuma estiver escolhida, escolhe aqui.
+function EscolherIgreja({ onEscolhida, botaoSair }) {
+  const [igrejas, setIgrejas] = useState(null);
+  const [erro, setErro] = useState("");
+  const [abrindo, setAbrindo] = useState(null);
+  useEffect(() => { listarEmpresasAtivas().then(setIgrejas).catch((e) => setErro(mensagemErro(e))); }, []);
+  async function escolher(id) {
+    setAbrindo(id);
+    try { await trocarEmpresa(id); onEscolhida(); } catch (e) { setErro(mensagemErro(e)); setAbrindo(null); }
+  }
+  return (
+    <div className="splash" style={{ padding: 16 }}>
+      <div className="card" style={{ maxWidth: 440, width: "100%", padding: 24 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 6 }}><Marca /><h2 style={{ fontSize: 18 }}>Em qual igreja vai trabalhar?</h2></div>
+        <p className="muted" style={{ marginBottom: 14 }}>Como administrador da plataforma, você escolhe a igreja. Dá para trocar depois clicando no nome dela no menu.</p>
+        {igrejas === null && !erro && <div className="carregando-linha"><div className="spinner" /> Carregando...</div>}
+        {igrejas && igrejas.length === 0 && <p className="muted">Nenhuma igreja ativa cadastrada.</p>}
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {(igrejas || []).map((i) => (
+            <button key={i.id} className="btn btn-ghost" style={{ justifyContent: "space-between" }} disabled={abrindo !== null} onClick={() => escolher(i.id)}>
+              <span>{i.nome_fantasia || i.razao_social}</span>{abrindo === i.id ? <span className="muted">abrindo…</span> : <Icone nome="seta" tamanho={16} />}
+            </button>
+          ))}
+        </div>
+        {erro && <div className="alert alert-danger" style={{ marginTop: 12 }}><Icone nome="alerta" tamanho={16} /><span>{erro}</span></div>}
+        <div style={{ marginTop: 18 }}>{botaoSair}</div>
       </div>
     </div>
   );
@@ -89,6 +121,10 @@ export default function App() {
     return <AvisoTela icone="cadeado" titulo="Usuário desativado"
       texto="O seu acesso foi desativado. Fale com o administrador da sua empresa." acoes={botaoSair} />;
   }
+  const recarregarPerfil = () => { setPerfilInfo(null); setTentativa((t) => t + 1); };
+  if (perfil?.plataforma_admin && !perfil.empresa_id) {
+    return <EscolherIgreja onEscolhida={recarregarPerfil} botaoSair={botaoSair} />;
+  }
   if (!perfil || !permissoes(perfil).lancar) {
     return <AvisoTela icone="cadeado" titulo="Sem acesso ao sistema"
       texto={`A conta ${email} ainda não foi liberada. Peça a um administrador para cadastrá-la em uma empresa.`} acoes={botaoSair} />;
@@ -96,5 +132,5 @@ export default function App() {
 
   // key: ao trocar de empresa, a tela inteira recomeça do zero (nada da empresa anterior fica em memória)
   return <ErpApp key={perfil.empresa_id} perfil={perfil} onSair={() => signOut()}
-    onEmpresaTrocada={() => { setPerfilInfo(null); setTentativa((t) => t + 1); }} />;
+    onEmpresaTrocada={recarregarPerfil} />;
 }

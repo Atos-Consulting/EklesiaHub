@@ -189,6 +189,12 @@ export default function NotasEntrada({ cadastros, podeEditar, podeAprovar, podeA
                         <input type="checkbox" checked={marcadas.has(n.id)} onChange={() => alternarMarca(n.id)}
                           aria-label={`Selecionar ${TIPOS_NOTA[n.tipo]} ${n.numero}`} />
                       )}
+                      {/* Já aprovada: marca verde fixa (não entra em "marcar todos" nem pode ser desmarcada) */}
+                      {["aprovada", "lancada"].includes(n.status) && (
+                        <span className="check-aprovada" role="img" aria-label="Nota já aprovada" title="Nota já aprovada">
+                          <Icone nome="check" tamanho={12} traco={3} />
+                        </span>
+                      )}
                     </td>
                   )}
                   <td>{formatarData(n.data_entrada)}</td>

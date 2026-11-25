@@ -9,6 +9,10 @@ export const TAMANHO_NUMERO_MAX = 30;
 
 export const chaveTamanhoNumero = (tipo) => `nota.numero_tamanho.${tipo}`;
 
+// Usar contabilidade (sem registro = sim). Desligado, o módulo Contábil some do menu da igreja.
+export const CHAVE_CONTABILIDADE = "contabilidade.ativa";
+export const usaContabilidade = (parametros) => parametros?.[CHAVE_CONTABILIDADE] !== "false";
+
 // `parametros` é um objeto { chave: valor } como devolvido por fetchCadastros().
 export function tamanhoNumero(parametros, tipo) {
   const v = Number(parametros?.[chaveTamanhoNumero(tipo)]);

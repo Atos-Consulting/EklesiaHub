@@ -54,12 +54,12 @@ function EmpresaModal({ inicial, ehMinha, onSalvo, onFechar }) {
   }
 
   return (
-    <Modal titulo={novo ? "Nova empresa" : "Editar empresa"} largura={600} onFechar={onFechar} fecharFora={false}
+    <Modal titulo={novo ? "Nova igreja" : "Editar igreja"} largura={600} onFechar={onFechar} fecharFora={false}
       rodape={<>
         <button className="btn btn-ghost" onClick={onFechar} disabled={salvando}>Cancelar</button>
-        <button className="btn btn-primary" onClick={salvar} disabled={salvando}>{salvando ? "Salvando..." : novo ? "Criar empresa" : "Salvar"}</button>
+        <button className="btn btn-primary" onClick={salvar} disabled={salvando}>{salvando ? "Salvando..." : novo ? "Criar igreja" : "Salvar"}</button>
       </>}>
-      <h3 className="section-title" style={{ marginTop: 14 }}>Dados da empresa</h3>
+      <h3 className="section-title" style={{ marginTop: 14 }}>Dados da igreja</h3>
       <label style={{ ...lbl, marginTop: 0 }} htmlFor="e-razao">Razão social *</label>
       <input id="e-razao" style={{ ...inp, ...borda("razaoSocial") }} value={form.razaoSocial} onChange={campo("razaoSocial")} autoFocus />
       {msg("razaoSocial")}
@@ -80,7 +80,7 @@ function EmpresaModal({ inicial, ehMinha, onSalvo, onFechar }) {
       {novo ? (
         <>
           <h3 className="section-title">Administrador inicial</h3>
-          <p className="muted" style={{ marginTop: -4 }}>Primeiro acesso da empresa. Depois ele cria os demais usuários.</p>
+          <p className="muted" style={{ marginTop: -4 }}>Primeiro acesso da igreja. Depois ele cria os demais usuários.</p>
           <label style={lbl} htmlFor="e-anome">Nome *</label>
           <input id="e-anome" style={{ ...inp, ...borda("adminNome") }} value={form.adminNome} onChange={campo("adminNome")} />
           {msg("adminNome")}
@@ -99,10 +99,10 @@ function EmpresaModal({ inicial, ehMinha, onSalvo, onFechar }) {
       ) : (
         <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 20, fontSize: 13.5, color: "var(--text-2)", cursor: ehMinha ? "not-allowed" : "pointer" }}>
           <input type="checkbox" checked={form.ativo} disabled={ehMinha} onChange={(e) => setForm((p) => ({ ...p, ativo: e.target.checked }))} />
-          Empresa ativa (desativada: ninguém dela consegue entrar; os dados são preservados)
+          Igreja ativa (desativada: ninguém dela consegue entrar; os dados são preservados)
         </label>
       )}
-      {!novo && ehMinha && <div className="muted" style={{ fontSize: 12.5, marginTop: 6 }}>Esta é a empresa em que você está trabalhando; ela não pode ser desativada.</div>}
+      {!novo && ehMinha && <div className="muted" style={{ fontSize: 12.5, marginTop: 6 }}>Esta é a igreja em que você está trabalhando; ela não pode ser desativada.</div>}
 
       {erro && <div className="alert alert-danger" role="alert" style={{ marginTop: 16 }}><Icone nome="alerta" tamanho={16} /><span>{erro}</span></div>}
     </Modal>
@@ -132,13 +132,13 @@ export default function Empresas({ perfil }) {
   return (
     <div>
       <div className="page-header">
-        <Header title="Empresas" subtitle="Cada empresa tem seus próprios dados, usuários e parâmetros — uma não enxerga a outra." />
-        <button className="btn btn-primary" onClick={() => setEditando("nova")}><Icone nome="mais" tamanho={16} traco={2.2} /> Nova empresa</button>
+        <Header title="Igrejas" subtitle="Cada igreja tem seus próprios dados, usuários e parâmetros — uma não enxerga a outra." />
+        <button className="btn btn-primary" onClick={() => setEditando("nova")}><Icone nome="mais" tamanho={16} traco={2.2} /> Nova igreja</button>
       </div>
 
       <div className="alert alert-warn" style={{ marginBottom: 16 }}>
         <Icone nome="escudo" tamanho={16} />
-        <span>Como administrador da plataforma você cria e gerencia empresas. Para trabalhar em uma delas (notas, fornecedores, financeiro), <strong>clique no nome da empresa no topo do menu</strong> e escolha: lá dentro você age como Administrador.</span>
+        <span>Como administrador da plataforma você cria e gerencia as igrejas. Para trabalhar em uma delas (notas, fornecedores, financeiro), <strong>clique no nome da igreja no topo do menu</strong> e escolha: lá dentro você age como Administrador.</span>
       </div>
       {aviso && <div className="alert alert-ok" role="status" style={{ marginBottom: 16 }}><Icone nome="check" tamanho={16} /><span>{aviso}</span></div>}
       {erro && <div className="alert alert-danger" role="alert" style={{ marginBottom: 16 }}><Icone nome="alerta" tamanho={16} /><span>{erro}</span></div>}
@@ -152,19 +152,19 @@ export default function Empresas({ perfil }) {
         <div className="table-wrap">
           <table className="table">
             <thead><tr>
-              <ThOrdenavel chave="empresa" ordenacao={ordenacao}>Empresa</ThOrdenavel>
+              <ThOrdenavel chave="empresa" ordenacao={ordenacao}>Igreja</ThOrdenavel>
               <ThOrdenavel chave="cnpj" ordenacao={ordenacao}>CNPJ</ThOrdenavel>
               <ThOrdenavel chave="usuarios" ordenacao={ordenacao} className="num">Usuários ativos</ThOrdenavel>
               <ThOrdenavel chave="situacao" ordenacao={ordenacao}>Situação</ThOrdenavel>
               <th />
             </tr></thead>
             <tbody>
-              {empresas === null && !erro && <tr><td className="vazio" colSpan={5}>Carregando empresas...</td></tr>}
-              {empresas && filtradas.length === 0 && <tr><td className="vazio" colSpan={5}>Nenhuma empresa encontrada.</td></tr>}
+              {empresas === null && !erro && <tr><td className="vazio" colSpan={5}>Carregando igrejas...</td></tr>}
+              {empresas && filtradas.length === 0 && <tr><td className="vazio" colSpan={5}>Nenhuma igreja encontrada.</td></tr>}
               {ordenacao.ordenadas.map((e) => (
                 <tr key={e.id}>
                   <td className="truncate">
-                    <div style={{ fontWeight: 550 }}>{e.nome_fantasia || e.razao_social}{e.id === perfil.empresa_id && <span className="muted" style={{ fontWeight: 400 }}> (sua empresa)</span>}</div>
+                    <div style={{ fontWeight: 550 }}>{e.nome_fantasia || e.razao_social}{e.id === perfil.empresa_id && <span className="muted" style={{ fontWeight: 400 }}> (em uso agora)</span>}</div>
                     {e.nome_fantasia && <div className="muted" style={{ fontSize: 12.5 }}>{e.razao_social}</div>}
                   </td>
                   <td className="muted">{e.cnpj ? mascararCnpj(e.cnpj) : "—"}</td>
@@ -176,12 +176,12 @@ export default function Empresas({ perfil }) {
             </tbody>
           </table>
         </div>
-        {empresas && empresas.length > 0 && <div className="table-footer"><span>{empresas.length} empresa(s)</span></div>}
+        {empresas && empresas.length > 0 && <div className="table-footer"><span>{empresas.length} igreja(s)</span></div>}
       </div>
 
       {editando && (
         <EmpresaModal inicial={editando === "nova" ? null : editando} ehMinha={editando !== "nova" && editando.id === perfil.empresa_id}
-          onSalvo={() => { setAviso(editando === "nova" ? "Empresa criada. Passe o e-mail e a senha ao administrador dela." : "Empresa atualizada."); setEditando(null); recarregar(); }}
+          onSalvo={() => { setAviso(editando === "nova" ? "Igreja criada. Passe o e-mail e a senha ao administrador dela." : "Igreja atualizada."); setEditando(null); recarregar(); }}
           onFechar={() => setEditando(null)} />
       )}
     </div>

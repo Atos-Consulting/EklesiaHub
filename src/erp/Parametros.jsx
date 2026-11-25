@@ -1,14 +1,14 @@
 import { Header } from "../ui";
 import { GRUPOS_PARAMETROS, ABAS_PARAMETROS } from "./parametros/grupos";
 
-export default function Parametros({ aba, cadastros, onCadastrosMudaram }) {
+export default function Parametros({ aba, perfil, cadastros, onCadastrosMudaram }) {
   const atual = ABAS_PARAMETROS.find((a) => a.id === aba) ?? ABAS_PARAMETROS[0];
   const { Tela } = GRUPOS_PARAMETROS.flatMap((g) => g.abas).find((a) => a.id === atual.id);
 
   return (
     <div>
       <div className="page-header">
-        <Header title="Parâmetros" subtitle="Configurações desta empresa, por área. Apenas administradores têm acesso." />
+        <Header title="Parâmetros" subtitle="Configurações desta igreja, por área. Apenas administradores têm acesso." />
       </div>
       <div className="param-layout">
         <nav className="param-nav" aria-label="Áreas dos parâmetros">
@@ -23,7 +23,7 @@ export default function Parametros({ aba, cadastros, onCadastrosMudaram }) {
           ))}
         </nav>
         <div className="card param-conteudo">
-          <Tela cadastros={cadastros} onCadastrosMudaram={onCadastrosMudaram} />
+          <Tela key={atual.id} perfil={perfil} cadastros={cadastros} onCadastrosMudaram={onCadastrosMudaram} />
         </div>
       </div>
     </div>
