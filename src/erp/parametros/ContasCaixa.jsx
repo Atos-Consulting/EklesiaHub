@@ -32,7 +32,7 @@ export default function ContasCaixa({ cadastros, onCadastrosMudaram }) {
   return (
     <>
       <CabecalhoAba titulo="Contas caixa" acaoRotulo="Nova conta caixa" onAcao={() => setEditando("novo")}
-        descricao="Caixas e contas bancárias de onde saem os pagamentos das notas. Cada uma tem saldo inicial e dados do banco; o saldo atual desconta as notas aprovadas a partir da data do saldo inicial." />
+        descricao="Caixas e contas bancárias de onde saem os pagamentos. Cada uma tem saldo inicial e dados do banco; o saldo atual desconta os pagamentos feitos (notas à vista e baixas no Financeiro) a partir da data do saldo inicial." />
       <div className="toolbar">
         <label style={{ flex: "1 1 240px", maxWidth: 340 }}>Buscar
           <input placeholder="Nome da conta ou banco" value={busca} onChange={(e) => setBusca(e.target.value)} style={inp} />
@@ -46,7 +46,7 @@ export default function ContasCaixa({ cadastros, onCadastrosMudaram }) {
             <ThOrdenavel chave="agencia" ordenacao={ordenacao}>Agência / Conta</ThOrdenavel>
             <ThOrdenavel chave="conta" ordenacao={ordenacao}>Conta contábil</ThOrdenavel>
             <ThOrdenavel chave="inicial" ordenacao={ordenacao} className="num">Saldo inicial</ThOrdenavel>
-            <ThOrdenavel chave="saidas" ordenacao={ordenacao} className="num">Saídas (notas)</ThOrdenavel>
+            <ThOrdenavel chave="saidas" ordenacao={ordenacao} className="num">Saídas (pagamentos)</ThOrdenavel>
             <ThOrdenavel chave="saldo" ordenacao={ordenacao} className="num">Saldo atual</ThOrdenavel>
             <ThOrdenavel chave="situacao" ordenacao={ordenacao}>Situação</ThOrdenavel>
             <th className="acoes"><span className="sr-only">Ações</span></th>
@@ -129,7 +129,7 @@ function CaixaForm({ caixa, contas, onFechar, onSalvo }) {
         </div>
       </div>
       <div className="muted" style={{ fontSize: 12.5, marginTop: 6 }}>
-        O saldo atual = saldo inicial − notas aprovadas com data de entrada a partir desta data. {caixa && "Alterar estes dois campos recalcula o saldo."}
+        O saldo atual = saldo inicial − pagamentos feitos a partir desta data. {caixa && "Alterar estes dois campos recalcula o saldo."}
       </div>
 
       <label style={lbl} htmlFor="cx-contabil">Conta contábil vinculada</label>

@@ -3,6 +3,8 @@ import { Header } from "../ui";
 import Icone from "./Icone";
 import Marca from "./Marca";
 import NotasEntrada from "./NotasEntrada";
+import ContasPagar from "./ContasPagar";
+import Pagamentos from "./Pagamentos";
 import Fornecedores from "./Fornecedores";
 import ImportarXml from "./ImportarXml";
 import Parametros from "./Parametros";
@@ -21,9 +23,8 @@ const MODULOS = [
     previsto: ["Saldo de caixa e bancos", "Contas a pagar e a receber da semana", "Entradas x saídas do mês", "Resultado do período (superávit/déficit)", "Vendas da livraria e do bazar"] },
   { id: "administrativo", grupo: "Gestão", rotulo: "Administrativo", icone: "pasta", pronto: true,
     telas: [{ id: "notas", rotulo: "Notas de entrada" }, { id: "fornecedores", rotulo: "Fornecedores" }, { id: "importar", rotulo: "Importar XML" }] },
-  { id: "financeiro", grupo: "Gestão", rotulo: "Financeiro", icone: "carteira", pronto: false,
-    descricao: "Controle de entradas, saídas e saldos.",
-    previsto: ["Contas a pagar e a receber", "Caixa, contas bancárias e conciliação", "Dízimos, ofertas e campanhas", "Orçamento e fluxo de caixa"] },
+  { id: "financeiro", grupo: "Gestão", rotulo: "Financeiro", icone: "carteira", pronto: true,
+    telas: [{ id: "pagar", rotulo: "Contas a pagar" }, { id: "pagamentos", rotulo: "Pagamentos" }] },
   { id: "contabil", grupo: "Gestão", rotulo: "Contábil", icone: "calculadora", pronto: false,
     descricao: "Escrituração contábil integrada aos demais módulos.",
     previsto: ["Plano de contas editável", "Lançamentos em partidas dobradas", "Razão e balancete", "DRE e balanço patrimonial", "Contabilização automática das notas aprovadas"] },
@@ -69,7 +70,7 @@ export default function ErpApp({ perfil, onSair }) {
 
   const modulo = visiveis.find((m) => m.id === rota.modulo) || visiveis.find((m) => m.pronto) || visiveis[0];
   const tela = modulo?.telas?.find((t) => t.id === rota.tela) || modulo?.telas?.[0];
-  const precisaCadastros = modulo?.id === "administrativo" || modulo?.id === "parametros";
+  const precisaCadastros = ["administrativo", "financeiro", "parametros"].includes(modulo?.id);
 
   useEffect(() => {
     document.title = `${[tela?.rotulo, modulo?.rotulo].filter(Boolean).join(" · ") || "ERP"} — EklesiaHub`;
@@ -79,7 +80,7 @@ export default function ErpApp({ perfil, onSair }) {
     () => fetchCadastros().then((dados) => { setCadastros(dados); setErro(""); }).catch((e) => setErro(mensagemErro(e))),
     [],
   );
-  // Recarrega ao entrar em Administrativo/Parâmetros: saldos das contas caixa e cadastros podem ter mudado em outra tela.
+  // Recarrega ao entrar em Administrativo/Financeiro/Parâmetros: saldos das contas caixa e cadastros podem ter mudado em outra tela.
   const moduloId = modulo?.id;
   useEffect(() => { if (precisaCadastros) recarregarCadastros(); }, [precisaCadastros, moduloId, recarregarCadastros]);
 
@@ -114,7 +115,11 @@ export default function ErpApp({ perfil, onSair }) {
     if (erro) return <div className="alert alert-danger" role="alert"><Icone nome="alerta" tamanho={16} /><span>{erro}</span></div>;
     if (!cadastros) return <div className="carregando-linha"><div className="spinner" /> Carregando...</div>;
     if (modulo.id === "parametros") return <Parametros aba={tela?.id} cadastros={cadastros} onCadastrosMudaram={recarregarCadastros} />;
-    const props = { cadastros, podeEditar: perm.lancar, podeAprovar: perm.aprovar, onCadastrosMudaram: recarregarCadastros };
+    if (modulo.id === "financeiro") {
+      const propsFin = { cadastros, podePagar: perm.pagar, onCadastrosMudaram: recarregarCadastros };
+      return tela?.id === "pagamentos" ? <Pagamentos {...propsFin} /> : <ContasPagar {...propsFin} />;
+    }
+    const props = { cadastros, podeEditar: perm.lancar, podeAprovar: perm.aprovar, podeAdministrar: perm.administrar, onCadastrosMudaram: recarregarCadastros };
     if (tela?.id === "fornecedores") return <Fornecedores {...props} />;
     if (tela?.id === "importar") return <ImportarXml perfil={perfil} {...props} />;
     return <NotasEntrada {...props} />;

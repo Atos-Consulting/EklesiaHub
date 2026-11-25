@@ -35,7 +35,7 @@ function Indicador({ icone, tom = "", rotulo, valor, sub }) {
   );
 }
 
-export default function NotasEntrada({ cadastros, podeEditar, podeAprovar, onCadastrosMudaram }) {
+export default function NotasEntrada({ cadastros, podeEditar, podeAprovar, podeAdministrar, onCadastrosMudaram }) {
   const [notas, setNotas] = useState(null);
   const [erro, setErro] = useState("");
   const [aberta, setAberta] = useState(null); // null | "nova" | id
@@ -224,8 +224,8 @@ export default function NotasEntrada({ cadastros, podeEditar, podeAprovar, onCad
           {lote.fase === "confirmar" && (
             <p style={{ fontSize: 13.5, color: "var(--text-2)", margin: "4px 0 12px" }}>
               <strong>{selecionadas.length}</strong> nota(s), somando <strong>{formatarMoeda(valorSelecionado)}</strong>. Depois de aprovadas,
-              as notas <strong>não poderão mais ser editadas</strong> (só canceladas, com motivo) e o valor sai da conta caixa de cada nota.
-              Notas sem conta caixa ou sem tipo contábil serão recusadas e continuarão como rascunho.
+              as notas <strong>não poderão mais ser editadas</strong> (só canceladas, com motivo). Cada nota gera as parcelas da sua condição de pagamento
+              em Financeiro → Contas a pagar (à vista já sai da conta caixa). Notas sem conta caixa, condição de pagamento ou tipo contábil serão recusadas e continuarão como rascunho.
             </p>
           )}
           {lote.fase === "andamento" && <p style={{ fontSize: 13.5, margin: "4px 0 12px" }}>Aprovando {lote.feitas + lote.falhas.length} de {lote.total}...</p>}
@@ -251,6 +251,7 @@ export default function NotasEntrada({ cadastros, podeEditar, podeAprovar, onCad
           cadastros={cadastros}
           podeEditar={podeEditar}
           podeAprovar={podeAprovar}
+          podeAdministrar={podeAdministrar}
           onCadastrosMudaram={onCadastrosMudaram}
           onMudou={aoMudar}
           onFechar={() => setAberta(null)}

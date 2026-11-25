@@ -32,6 +32,7 @@ O EklesiaHub hoje é **só um ERP multiempresa de igreja** (o `README.md` ainda 
 
 - Notas de entrada: rascunho → aprovada → cancelada. Nota aprovada é imutável. O total é calculado no banco e o cliente não digita.
 - Use `numeric`, imutabilidade e estorno em vez de edição. O sistema não substitui o contador: o plano de contas semeado é só exemplo.
+- Aprovar a nota gera os títulos do Financeiro (`titulos_financeiros`, contas a pagar) conforme a condição de pagamento, no valor **líquido** (total − retenções). À vista já nasce pago pela conta caixa da nota; parcelado fica em aberto até a baixa (`pagar_titulo`). O saldo da conta caixa desconta os **pagamentos** não estornados (`contas_caixa_saldo`). Títulos e pagamentos só são gravados por funções do banco; cancelar nota com parcela paga manualmente exige estornar antes. A prévia das parcelas na tela (`src/erp/financeiro.js`) repete a conta de `gerar_titulos_nota`: mudou uma, mude a outra.
 - Importar XML: `src/erp/ImportarXml.jsx` mais o leitor puro `src/erp/nfe.js` (NF-e 55 / NFC-e 65). Cada XML vira sempre um **rascunho**.
 
 ### Parâmetros
@@ -40,7 +41,7 @@ O catálogo fica em `src/erp/catalogoParametros.js`. **Não** chame o arquivo de
 
 ## Migrations
 
-Arquivos SQL soltos na raiz, rodados **à mão no SQL Editor** em ordem: `schema.sql` → `migration_v2` → `v3` (Kids) → `v4_erp` → `v5_multiempresa` → `v6_parametros_fiscal` → `v7_niveis_usuarios`. Não presuma que a última já foi aplicada no banco real. A UI que depende dela quebra até ser aplicada. Teste migrations novas com dados legados já aprovados, porque os gatilhos de imutabilidade podem barrar o backfill.
+Arquivos SQL soltos na raiz, rodados **à mão no SQL Editor** em ordem: `schema.sql` → `migration_v2` → `v3` (Kids) → `v4_erp` → `v5_multiempresa` → `v6_parametros_fiscal` → `v7_niveis_usuarios` → `v8_financeiro`. Não presuma que a última já foi aplicada no banco real. A UI que depende dela quebra até ser aplicada. Teste migrations novas com dados legados já aprovados, porque os gatilhos de imutabilidade podem barrar o backfill.
 
 ## BMAD
 

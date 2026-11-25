@@ -1,4 +1,5 @@
 import ContasCaixa from "./ContasCaixa";
+import CondicoesPagamento from "./CondicoesPagamento";
 import PlanoContas from "./PlanoContas";
 import TiposContabeis from "./TiposContabeis";
 import CentrosCusto from "./CentrosCusto";
@@ -8,7 +9,10 @@ import NumeroNotas from "./NumeroNotas";
 // Parâmetros da empresa (só o Administrador acessa), organizados por área.
 // Para um novo parâmetro: acrescente uma aba no grupo certo (e, se for do sistema, o catálogo em catalogoParametros.js).
 export const GRUPOS_PARAMETROS = [
-  { id: "financeiro", rotulo: "Financeiro", abas: [{ id: "caixas", rotulo: "Contas caixa", Tela: ContasCaixa }] },
+  { id: "financeiro", rotulo: "Financeiro", abas: [
+    { id: "caixas", rotulo: "Contas caixa", Tela: ContasCaixa },
+    { id: "condicoes", rotulo: "Condições de pagamento", Tela: CondicoesPagamento },
+  ] },
   { id: "contabil", rotulo: "Contábil", abas: [
     { id: "contas", rotulo: "Plano de contas", Tela: PlanoContas },
     { id: "tipos", rotulo: "Tipos contábeis", Tela: TiposContabeis },

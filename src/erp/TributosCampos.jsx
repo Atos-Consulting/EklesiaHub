@@ -1,70 +1,82 @@
-import { lbl, inp } from "../estilos";
 import { GRUPOS_TRIBUTOS_NOTA, GRUPOS_TRIBUTOS_ITEM, CAMPOS_TEXTO_ITEM } from "./tributos";
+import { formatarMoeda, lerNumero } from "./format";
 
-const grade = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: "0 12px" };
+// Tributos em cartões (rótulo + valor), como no totvs-portal: mais fácil de ler que uma tabela alta.
+// Em edição o cartão vira campo; só leitura mostra o valor e esmaece o que está zerado/vazio.
 
-function CampoNumero({ campo, valor, onChange, disabled }) {
+const temValor = (v) => v === true || (v !== false && String(v ?? "").trim() !== "");
+
+function valorLegivel(campo, v) {
+  if (!temValor(v)) return "—";
+  if (campo.texto) return String(v);
+  const n = lerNumero(v);
+  if (!Number.isFinite(n)) return String(v);
+  return campo.percentual ? `${n.toLocaleString("pt-BR", { maximumFractionDigits: 4 })}%` : formatarMoeda(n);
+}
+
+function Cartao({ campo, valor, onChange, disabled }) {
+  const vazio = !temValor(valor);
+  const marca = campo.soma ? <span className="tributo-tag soma" title="Entra no total da nota">soma no total</span>
+    : campo.retencao ? <span className="tributo-tag retencao" title="Sai do valor pago ao fornecedor">retenção</span> : null;
   return (
-    <div>
-      <label style={{ ...lbl, marginTop: 8, fontSize: 12.5 }}>
-        {campo.rotulo}
-        {campo.soma && <span className="pill pill-warn" style={{ marginLeft: 6, padding: "0 7px", fontSize: 10.5 }}>soma no total</span>}
-      </label>
-      <input style={{ ...inp, textAlign: "right" }} inputMode="decimal" placeholder="0,00" value={valor ?? ""}
-        onChange={(e) => onChange(campo.chave, e.target.value)} disabled={disabled} aria-label={campo.rotulo} />
+    <div className={`tributo${disabled && vazio ? " tributo-zerado" : ""}${!disabled ? " tributo-editavel" : ""}`}>
+      <span className="tributo-rotulo">{campo.rotulo}{marca}</span>
+      {disabled ? (
+        <span className="tributo-valor">{valorLegivel(campo, valor)}</span>
+      ) : (
+        <div className="tributo-campo">
+          {!campo.texto && <span className="tributo-prefixo">{campo.percentual ? "%" : "R$"}</span>}
+          <input className="tributo-input" value={valor ?? ""} aria-label={campo.rotulo}
+            inputMode={campo.texto ? undefined : "decimal"} placeholder={campo.texto ? "" : "0,00"}
+            maxLength={campo.tamanho ?? (campo.texto ? 60 : 20)}
+            style={campo.texto ? { textAlign: "left" } : undefined}
+            onChange={(e) => onChange(campo.chave, e.target.value)} />
+        </div>
+      )}
     </div>
   );
 }
 
-// Tributos do cabeçalho da nota (totais). IPI e ICMS ST somam ao total; o resto é informativo/retenções.
-export function TributosNota({ fiscal, onChange, disabled }) {
+function Marca({ marca, valor, onChange, disabled }) {
+  if (disabled) {
+    return (
+      <div className={`tributo${valor === true ? "" : " tributo-zerado"}`}>
+        <span className="tributo-rotulo">{marca.rotulo}</span>
+        <span className="tributo-valor">{valor === true ? "Sim" : "Não"}</span>
+      </div>
+    );
+  }
   return (
-    <div>
-      {GRUPOS_TRIBUTOS_NOTA.map((g) => (
-        <div key={g.titulo}>
-          <div className="grupo-titulo">{g.titulo}</div>
-          <div style={grade}>
-            {g.campos.map((c) => <CampoNumero key={c.chave} campo={c} valor={fiscal[c.chave]} onChange={onChange} disabled={disabled} />)}
-            {(g.textos ?? []).map((t) => (
-              <div key={t.chave}>
-                <label style={{ ...lbl, marginTop: 8, fontSize: 12.5 }}>{t.rotulo}</label>
-                <input style={inp} maxLength={60} value={fiscal[t.chave] ?? ""} onChange={(e) => onChange(t.chave, e.target.value)} disabled={disabled} />
-              </div>
-            ))}
-            {(g.marcas ?? []).map((m) => (
-              <label key={m.chave} style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 30, fontSize: 13, color: "var(--text-2)" }}>
-                <input type="checkbox" checked={fiscal[m.chave] === true} disabled={disabled} onChange={(e) => onChange(m.chave, e.target.checked)} />
-                {m.rotulo}
-              </label>
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
+    <label className="tributo tributo-editavel tributo-marca">
+      <input type="checkbox" checked={valor === true} onChange={(e) => onChange(marca.chave, e.target.checked)} />
+      <span>{marca.rotulo}<span className="tributo-tag retencao">sai do valor pago</span></span>
+    </label>
   );
+}
+
+function Grupos({ grupos, fiscal, onChange, disabled }) {
+  return grupos.map((g) => (
+    <div key={g.titulo}>
+      <div className="grupo-titulo">{g.titulo}</div>
+      <div className="tributos-grid">
+        {g.campos.map((c) => <Cartao key={c.chave} campo={c} valor={fiscal[c.chave]} onChange={onChange} disabled={disabled} />)}
+        {(g.textos ?? []).map((t) => <Cartao key={t.chave} campo={{ ...t, texto: true }} valor={fiscal[t.chave]} onChange={onChange} disabled={disabled} />)}
+        {(g.marcas ?? []).map((m) => <Marca key={m.chave} marca={m} valor={fiscal[m.chave]} onChange={onChange} disabled={disabled} />)}
+      </div>
+    </div>
+  ));
+}
+
+// Tributos do cabeçalho da nota (totais). IPI e ICMS ST somam ao total; retenções saem do valor a pagar.
+export function TributosNota({ fiscal, onChange, disabled }) {
+  return <Grupos grupos={GRUPOS_TRIBUTOS_NOTA} fiscal={fiscal} onChange={onChange} disabled={disabled} />;
 }
 
 // Tributos e dados fiscais de UM item (NCM, CFOP, ICMS, IPI, PIS, COFINS, ISS, retenções).
 export function TributosItem({ fiscal, onChange, disabled }) {
-  return (
-    <div>
-      <div className="grupo-titulo" style={{ marginTop: 0 }}>Classificação fiscal</div>
-      <div style={grade}>
-        {CAMPOS_TEXTO_ITEM.map((c) => (
-          <div key={c.chave}>
-            <label style={{ ...lbl, marginTop: 8, fontSize: 12.5 }}>{c.rotulo}</label>
-            <input style={inp} maxLength={c.tamanho} value={fiscal[c.chave] ?? ""} onChange={(e) => onChange(c.chave, e.target.value)} disabled={disabled} aria-label={c.rotulo} />
-          </div>
-        ))}
-      </div>
-      {GRUPOS_TRIBUTOS_ITEM.map((g) => (
-        <div key={g.titulo}>
-          <div className="grupo-titulo">{g.titulo}</div>
-          <div style={grade}>
-            {g.campos.map((c) => <CampoNumero key={c.chave} campo={c} valor={fiscal[c.chave]} onChange={onChange} disabled={disabled} />)}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
+  if (disabled && !Object.values(fiscal ?? {}).some(temValor)) {
+    return <p className="muted" style={{ fontSize: 13, margin: "12px 0 0" }}>Nenhum tributo informado para este item.</p>;
+  }
+  const classificacao = { titulo: "Classificação fiscal", campos: CAMPOS_TEXTO_ITEM.map((c) => ({ ...c, texto: true })) };
+  return <Grupos grupos={[classificacao, ...GRUPOS_TRIBUTOS_ITEM]} fiscal={fiscal} onChange={onChange} disabled={disabled} />;
 }

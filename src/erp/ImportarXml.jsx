@@ -27,12 +27,13 @@ const MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julh
 
 // ── Importação de arquivos .xml ──────────────────────────────────────────────
 
-function PorArquivos({ perfil, cadastros, podeEditar, podeAprovar, onCadastrosMudaram }) {
+function PorArquivos({ perfil, cadastros, podeEditar, podeAprovar, podeAdministrar, onCadastrosMudaram }) {
   const tiposAtivos = cadastros.tipos.filter((t) => t.ativo);
   const caixasAtivas = cadastros.caixas.filter((c) => c.ativo);
   const [tipoId, setTipoId] = useState("");
   const [centroId, setCentroId] = useState("");
   const [caixaId, setCaixaId] = useState(() => (caixasAtivas.length === 1 ? String(caixasAtivas[0].id) : ""));
+  const [condicaoId, setCondicaoId] = useState("");
   const [analises, setAnalises] = useState([]);
   const [lendo, setLendo] = useState(false);
   const [importando, setImportando] = useState(false);
@@ -138,7 +139,7 @@ function PorArquivos({ perfil, cadastros, podeEditar, podeAprovar, onCadastrosMu
         const id = await salvarNota(null, {
           tipo: "nfe", numero: d.numero, serie: d.serie || "", chave_acesso: d.chave, fornecedor_id: forn.id,
           data_emissao: d.dataEmissao, data_entrada: d.dataEmissao > hoje ? d.dataEmissao : hoje,
-          centro_custo_id: centroId || null, conta_caixa_id: caixaId || null, natureza_operacao: d.natOp || "",
+          centro_custo_id: centroId || null, conta_caixa_id: caixaId || null, condicao_pagamento_id: condicaoId || null, natureza_operacao: d.natOp || "",
           valor_frete: d.ajustes.frete, valor_seguro: d.ajustes.seguro, valor_outras: d.ajustes.outras, valor_desconto: d.ajustes.desconto,
           fiscal: d.fiscal, // o total da nota é calculado pelo banco a partir dos itens e destes campos
           observacoes: `Importada do XML ${a.nome} (${d.modeloNome}).`,
@@ -202,6 +203,13 @@ function PorArquivos({ perfil, cadastros, podeEditar, podeAprovar, onCadastrosMu
             <select id="imp-caixa" style={inp} value={caixaId} onChange={(e) => setCaixaId(e.target.value)}>
               <option value="">— Definir na aprovação —</option>
               {caixasAtivas.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={lbl} htmlFor="imp-condicao">Condição de pagamento</label>
+            <select id="imp-condicao" style={inp} value={condicaoId} onChange={(e) => setCondicaoId(e.target.value)}>
+              <option value="">— Definir na aprovação —</option>
+              {cadastros.condicoes.filter((c) => c.ativo).map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
             </select>
           </div>
         </div>
@@ -300,7 +308,7 @@ function PorArquivos({ perfil, cadastros, podeEditar, podeAprovar, onCadastrosMu
       )}
 
       {notaAberta && (
-        <NotaModal notaId={notaAberta} cadastros={cadastros} podeEditar={podeEditar} podeAprovar={podeAprovar}
+        <NotaModal notaId={notaAberta} cadastros={cadastros} podeEditar={podeEditar} podeAprovar={podeAprovar} podeAdministrar={podeAdministrar}
           onCadastrosMudaram={onCadastrosMudaram} onMudou={() => {}} onFechar={() => setNotaAberta(null)} />
       )}
     </>
@@ -309,7 +317,7 @@ function PorArquivos({ perfil, cadastros, podeEditar, podeAprovar, onCadastrosMu
 
 // ── Pela chave de acesso ─────────────────────────────────────────────────────
 
-function PorChave({ cadastros, podeEditar, podeAprovar, onCadastrosMudaram }) {
+function PorChave({ cadastros, podeEditar, podeAprovar, podeAdministrar, onCadastrosMudaram }) {
   const [entrada, setEntrada] = useState("");
   const [existente, setExistente] = useState(null); // { chave, nota }
   const [prefill, setPrefill] = useState(null);
@@ -381,7 +389,7 @@ function PorChave({ cadastros, podeEditar, podeAprovar, onCadastrosMudaram }) {
       </div>
 
       {prefill && (
-        <NotaModal cadastros={cadastros} podeEditar={podeEditar} podeAprovar={podeAprovar} prefill={prefill}
+        <NotaModal cadastros={cadastros} podeEditar={podeEditar} podeAprovar={podeAprovar} podeAdministrar={podeAdministrar} prefill={prefill}
           onCadastrosMudaram={onCadastrosMudaram} onMudou={() => {}} onFechar={() => setPrefill(null)} />
       )}
       {novoFornecedor && (

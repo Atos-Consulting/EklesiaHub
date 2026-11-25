@@ -14,8 +14,11 @@ export function mensagemErro(e) {
   if (msg.includes("centros_custo_empresa_nome_uq")) return "Já existe um centro de custo com este nome.";
   if (msg.includes("tipos_contabeis_empresa_nome_uq")) return "Já existe um tipo contábil com este nome.";
   if (msg.includes("contas_caixa_empresa_nome_uq")) return "Já existe uma conta caixa com este nome.";
+  if (msg.includes("condicoes_pagamento_empresa_nome_uq")) return "Já existe uma condição de pagamento com este nome.";
+  if (msg.includes("condicoes_pagamento_a_vista_ck")) return "Condição à vista tem uma parcela só, paga no ato.";
+  if (msg.includes("pagamentos_ativo_uq")) return "Este título já foi pago.";
   if (msg.includes("tipos_contabeis_check")) return "A conta de débito e a de crédito precisam ser diferentes.";
-  if (e?.code === "23503" && /(debito|credito|conta|caixa|tipo)_fk/.test(msg)) return "A conta escolhida não pertence a esta empresa. Atualize a página e tente de novo.";
+  if (e?.code === "23503" && /(debito|credito|conta|caixa|tipo|condicao)_fk/.test(msg)) return "A conta escolhida não pertence a esta empresa. Atualize a página e tente de novo.";
   if (e?.code === "42501" || msg.includes("row-level security") || msg.includes("permission denied")) {
     return "Você não tem permissão para esta ação.";
   }
@@ -28,7 +31,7 @@ export function mensagemErro(e) {
 // ── Cadastros-base ───────────────────────────────────────────────
 
 export async function fetchCadastros() {
-  const [contas, centros, fundos, pessoas, parametros, tipos, caixas] = await Promise.all([
+  const [contas, centros, fundos, pessoas, parametros, tipos, caixas, condicoes] = await Promise.all([
     supabase.from("plano_contas").select("id,codigo,nome,natureza,analitica,pai_id,ativo").order("codigo"),
     supabase.from("centros_custo").select("id,nome,ativo").order("nome"),
     supabase.from("fundos").select("id,nome,restrito,ativo").order("nome"),
@@ -36,12 +39,13 @@ export async function fetchCadastros() {
     supabase.from("parametros").select("chave,valor"),
     supabase.from("tipos_contabeis").select("*").order("nome"),
     supabase.from("contas_caixa_saldo").select("*").order("nome"),
+    supabase.from("condicoes_pagamento").select("*").order("nome"),
   ]);
-  const erro = [contas, centros, fundos, pessoas, parametros, tipos, caixas].find((r) => r.error)?.error;
+  const erro = [contas, centros, fundos, pessoas, parametros, tipos, caixas, condicoes].find((r) => r.error)?.error;
   if (erro) throw erro;
   return {
     contas: contas.data, centros: centros.data, fundos: fundos.data, pessoas: pessoas.data,
-    tipos: tipos.data, caixas: caixas.data,
+    tipos: tipos.data, caixas: caixas.data, condicoes: condicoes.data,
     // { chave: valor } — ex.: { "nota.numero_tamanho.nfe": "9" }
     parametros: Object.fromEntries(parametros.data.map((p) => [p.chave, p.valor])),
   };
@@ -167,6 +171,12 @@ export const salvarContaCaixa = (id, { nome, banco, agencia, numeroConta, saldoI
     saldo_inicial: saldoInicial, data_saldo_inicial: dataSaldoInicial, conta_contabil_id: contaContabilId ? Number(contaContabilId) : null, ativo,
   });
 
+export const salvarCondicaoPagamento = (id, { nome, tipo, formaPagamento, parcelas, diasPrimeira, intervaloDias, ativo }) =>
+  gravar("condicoes_pagamento", id, {
+    nome: nome.trim(), tipo, forma_pagamento: formaPagamento || null,
+    parcelas: tipo === "a_vista" ? 1 : parcelas, dias_primeira: tipo === "a_vista" ? 0 : diasPrimeira, intervalo_dias: intervaloDias, ativo,
+  });
+
 // ── Notas de entrada ─────────────────────────────────────────────
 
 export async function listarNotas() {
@@ -182,14 +192,15 @@ export async function listarNotas() {
 }
 
 export async function carregarNota(id) {
-  const [doc, itens, anexos] = await Promise.all([
+  const [doc, itens, anexos, titulos] = await Promise.all([
     supabase.from("documentos_entrada").select("*").eq("id", id).single(),
     supabase.from("documento_entrada_itens").select("*").eq("documento_id", id).order("id"),
     supabase.from("documento_anexos").select("*").eq("documento_id", id).order("id"),
+    supabase.from("titulos_pagar").select("*").eq("documento_id", id).order("parcela"),
   ]);
-  const erro = [doc, itens, anexos].find((r) => r.error)?.error;
+  const erro = [doc, itens, anexos, titulos].find((r) => r.error)?.error;
   if (erro) throw erro;
-  return { nota: doc.data, itens: itens.data, anexos: anexos.data };
+  return { nota: doc.data, itens: itens.data, anexos: anexos.data, titulos: titulos.data };
 }
 
 // Notas (não canceladas) que já existem com essas chaves de acesso OU esses números. Usado para
@@ -241,6 +252,42 @@ export async function excluirRascunho(id) {
   const { error } = await supabase.from("documentos_entrada").delete().eq("id", id).select("id").single();
   if (error) throw error;
   if (anexos.length) await supabase.storage.from(BUCKET).remove(anexos.map((a) => a.caminho));
+}
+
+// ── Financeiro (contas a pagar) ──────────────────────────────────
+// Os títulos nascem da aprovação da nota; baixa, estorno e vencimento passam por funções do banco.
+
+export async function listarTitulosPagar() {
+  const { data, error } = await supabase.from("titulos_pagar").select("*")
+    .order("vencimento").order("id").limit(2000);
+  if (error) throw error;
+  return data;
+}
+
+export async function listarPagamentos() {
+  const { data, error } = await supabase.from("pagamentos_lista").select("*")
+    .order("data_pagamento", { ascending: false }).order("id", { ascending: false }).limit(2000);
+  if (error) throw error;
+  return data;
+}
+
+export async function pagarTitulo(tituloId, { contaCaixaId, data, juros, multa, desconto, observacao }) {
+  const { data: id, error } = await supabase.rpc("pagar_titulo", {
+    p_titulo: tituloId, p_conta_caixa: Number(contaCaixaId), p_data: data,
+    p_juros: juros, p_multa: multa, p_desconto: desconto, p_observacao: observacao,
+  });
+  if (error) throw error;
+  return id;
+}
+
+export async function estornarPagamento(pagamentoId, motivo) {
+  const { error } = await supabase.rpc("estornar_pagamento", { p_pagamento: pagamentoId, p_motivo: motivo.trim() });
+  if (error) throw error;
+}
+
+export async function alterarVencimento(tituloId, vencimento) {
+  const { error } = await supabase.rpc("alterar_vencimento", { p_titulo: tituloId, p_vencimento: vencimento });
+  if (error) throw error;
 }
 
 // ── Anexos ───────────────────────────────────────────────────────

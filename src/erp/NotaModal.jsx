@@ -5,6 +5,8 @@ import Icone from "./Icone";
 import Modal from "./Modal";
 import PessoaModal from "./PessoaModal";
 import { TributosNota, TributosItem } from "./TributosCampos";
+import { CondicaoForm } from "./parametros/CondicoesPagamento";
+import { TIPOS_CONDICAO, FORMAS_PAGAMENTO, resumoCondicao, gerarParcelas, centavosRetencoes, situacaoTitulo } from "./financeiro";
 import {
   carregarNota, salvarNota, aprovarNota, cancelarNota, excluirRascunho,
   enviarAnexo, removerAnexo, urlAnexo, mensagemErro,
@@ -15,7 +17,7 @@ import {
 } from "./format";
 import { tamanhoNumero } from "./catalogoParametros";
 import {
-  fiscalParaBanco, fiscalDoBanco, somarTributosDosItens,
+  fiscalParaBanco, fiscalDoBanco, somarTributosDosItens, contarFiscal,
   chavesNumericasNota, chavesTextoNota, chavesMarcaNota, chavesNumericasItem, chavesTextoItem,
 } from "./tributos";
 
@@ -31,9 +33,17 @@ const dinheiro = (txt) => { const n = lerNumero(txt); return Number.isFinite(n) 
 const dinheiroInvalido = (txt) => String(txt ?? "").trim() !== "" && !(lerNumero(txt) >= 0);
 const cent = (txt) => paraCentavos(dinheiro(txt));
 const doBanco = (n) => (Number(n) > 0 ? numeroParaCampo(Number(n)) : "");
-const temFiscal = (f) => Object.values(f ?? {}).some((v) => v === true || String(v ?? "").trim() !== "");
+const NOVA_CONDICAO = "__nova__";
 
-export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, prefill, onCadastrosMudaram, onMudou, onFechar }) {
+// Condição sugerida numa nota nova: a única ativa, ou a única "à vista" ativa.
+function condicaoPadrao(condicoes) {
+  const ativas = condicoes.filter((c) => c.ativo);
+  if (ativas.length === 1) return String(ativas[0].id);
+  const vista = ativas.filter((c) => c.tipo === "a_vista");
+  return vista.length === 1 ? String(vista[0].id) : "";
+}
+
+export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, podeAdministrar, prefill, onCadastrosMudaram, onMudou, onFechar }) {
   const [idAtual, setIdAtual] = useState(notaId);
   const [carregando, setCarregando] = useState(Boolean(notaId));
   const [nota, setNota] = useState(null); // registro do banco (status, datas de aprovação...)
@@ -43,13 +53,15 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
       tipo: "nfe", numero: "", serie: "", chaveAcesso: "", fornecedorId: "",
       dataEmissao: hojeISO(), dataEntrada: hojeISO(), centroCustoId: "",
       contaCaixaId: caixasAtivas.length === 1 ? String(caixasAtivas[0].id) : "",
+      condicaoId: condicaoPadrao(cadastros.condicoes),
       naturezaOperacao: "", observacoes: "",
       frete: "", seguro: "", outras: "", desconto: "", fiscal: {},
       ...prefill, // dados já conhecidos (ex.: lidos da chave de acesso)
     };
   });
   const [itens, setItens] = useState(() => [itemVazio()]);
-  const [tributosAbertos, setTributosAbertos] = useState(false);
+  const [titulos, setTitulos] = useState([]); // parcelas geradas no Financeiro (nota aprovada/cancelada)
+  const [novaCondicao, setNovaCondicao] = useState(false);
   const [anexos, setAnexos] = useState([]);
   const [pendentes, setPendentes] = useState([]);
   const [erro, setErro] = useState("");
@@ -60,18 +72,19 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
   const [novoFornecedor, setNovoFornecedor] = useState(false);
   const inputArquivo = useRef(null);
 
-  function aplicar({ nota: n, itens: its, anexos: ax }) {
+  function aplicar({ nota: n, itens: its, anexos: ax, titulos: tts }) {
     setNota(n);
     setForm({
       tipo: n.tipo, numero: n.numero, serie: n.serie || "", chaveAcesso: n.chave_acesso || "",
       fornecedorId: String(n.fornecedor_id), dataEmissao: n.data_emissao, dataEntrada: n.data_entrada,
       centroCustoId: n.centro_custo_id ? String(n.centro_custo_id) : "",
       contaCaixaId: n.conta_caixa_id ? String(n.conta_caixa_id) : "",
+      condicaoId: n.condicao_pagamento_id ? String(n.condicao_pagamento_id) : "",
       naturezaOperacao: n.natureza_operacao || "", observacoes: n.observacoes || "",
       frete: doBanco(n.valor_frete), seguro: doBanco(n.valor_seguro), outras: doBanco(n.valor_outras), desconto: doBanco(n.valor_desconto),
       fiscal: fiscalDoBanco(n.fiscal),
     });
-    setTributosAbertos(temFiscal(n.fiscal));
+    setTitulos(tts ?? []);
     setItens(its.length
       ? its.map((i) => ({
           chave: crypto.randomUUID(), descricao: i.descricao, quantidade: campoTexto(Number(i.quantidade)),
@@ -103,6 +116,7 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
   const rotuloConta = (id) => { const c = contaPorId.get(String(id)); return c ? `${c.codigo} — ${c.nome}` : "?"; };
   const descricaoTipo = (t) => `Débito: ${rotuloConta(t.conta_debito_id)}  |  Crédito: ${rotuloConta(t.conta_credito_id)}`;
   const caixaSelecionada = cadastros.caixas.find((c) => String(c.id) === form.contaCaixaId);
+  const condicao = cadastros.condicoes.find((c) => String(c.id) === form.condicaoId);
 
   const fornecedores = cadastros.pessoas.filter(
     (p) => p.papeis.includes("fornecedor") && (p.ativo || String(p.id) === form.fornecedorId));
@@ -115,6 +129,8 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
   const totalCent = centItens + cent(form.frete) + cent(form.seguro) + cent(form.outras) - cent(form.desconto) + centIpi + centSt;
   const centRetencoes = cent(form.fiscal.inss) + cent(form.fiscal.irrf) + cent(form.fiscal.csll) + cent(form.fiscal.outras_retencoes)
     + (form.fiscal.iss_retido === true ? cent(form.fiscal.iss) : 0);
+  const centLiquido = totalCent - centavosRetencoes(form.fiscal);
+  const previa = gerarParcelas(condicao, { emissao: form.dataEmissao, entrada: form.dataEntrada, centavos: centLiquido });
 
   // ── Validação ──
   const erros = { itens: {} };
@@ -208,6 +224,7 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
         tipo: form.tipo, numero: form.numero.trim(), serie: form.serie.trim(), chave_acesso: chave,
         fornecedor_id: Number(form.fornecedorId), data_emissao: form.dataEmissao, data_entrada: form.dataEntrada,
         centro_custo_id: form.centroCustoId || null, conta_caixa_id: form.contaCaixaId || null,
+        condicao_pagamento_id: form.condicaoId || null,
         natureza_operacao: form.naturezaOperacao.trim(), observacoes: form.observacoes.trim(),
         valor_frete: dinheiro(form.frete), valor_seguro: dinheiro(form.seguro), valor_outras: dinheiro(form.outras), valor_desconto: dinheiro(form.desconto),
         fiscal: fiscalParaBanco(form.fiscal, { numeros: chavesNumericasNota, textos: chavesTextoNota, marcas: chavesMarcaNota }),
@@ -252,6 +269,9 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
     setErro("");
     if (temErro) setErro("Revise os campos destacados em vermelho.");
     else if (!form.contaCaixaId) setErro("Informe a conta caixa da nota para aprová-la.");
+    else if (!form.condicaoId) setErro("Informe a condição de pagamento da nota para aprová-la.");
+    else if (centLiquido <= 0) setErro("As retenções não podem ser iguais ou maiores que o total da nota.");
+    else if (previa.length === 0) setErro("O valor a pagar é pequeno demais para dividir nas parcelas desta condição.");
     else setConfirmacao("aprovar");
   }
 
@@ -277,6 +297,12 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
     catch (e) { setErro(mensagemErro(e)); setOcupado(""); setConfirmacao(null); }
   }
 
+  async function aoSalvarCondicao(c) {
+    setNovaCondicao(false);
+    await onCadastrosMudaram();
+    if (c?.id) setForm((p) => ({ ...p, condicaoId: String(c.id) }));
+  }
+
   async function aoSalvarFornecedor(pessoa) {
     setNovoFornecedor(false);
     await onCadastrosMudaram();
@@ -288,7 +314,7 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
   const estiloCampo = (k) => ({ ...inp, ...borda(k) });
   const somenteLeitura = { ...inp, background: "var(--surface-2)", textAlign: "right", fontWeight: 600 };
   const titulo = novo ? "Nova nota de entrada" : `${TIPOS_NOTA[form.tipo] || "Nota"} ${form.numero}${form.serie ? `/${form.serie}` : ""}`;
-  const colunas = "minmax(150px,2fr) 64px 96px 100px minmax(170px,2fr) minmax(110px,1fr) 32px 32px";
+  const colunas = "minmax(150px,2fr) 64px 96px 100px minmax(170px,2fr) minmax(110px,1fr) 96px 32px";
   const tiposAtivos = cadastros.tipos.filter((t) => t.ativo);
 
   const rodape = carregando ? null : (
@@ -406,16 +432,6 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
                 {cadastros.centros.filter((c) => c.ativo || String(c.id) === form.centroCustoId).map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
               </select>
             </div>
-            <div>
-              <label style={lbl}>Conta caixa (de onde sai o pagamento){podeAprovar ? " *" : ""}</label>
-              <select style={estiloCampo()} value={form.contaCaixaId} onChange={campo("contaCaixaId")} {...desabilitado}>
-                <option value="">— Selecione —</option>
-                {cadastros.caixas.filter((c) => c.ativo || String(c.id) === form.contaCaixaId).map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
-              </select>
-              {caixaSelecionada
-                ? <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>Saldo atual: <strong style={{ color: Number(caixaSelecionada.saldo_atual) < 0 ? "var(--danger)" : "var(--text)" }}>{formatarMoeda(caixaSelecionada.saldo_atual)}</strong></div>
-                : editavel && cadastros.caixas.length === 0 && <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>Cadastre em Parâmetros → Contas caixa.</div>}
-            </div>
           </div>
 
           {form.tipo === "nfe" && (
@@ -439,7 +455,7 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
           <div style={{ overflowX: "auto", paddingBottom: 4 }}>
             <div style={{ minWidth: 900 }}>
               <div className="itens-cabecalho" style={{ display: "grid", gridTemplateColumns: colunas, gap: 6, margin: "4px 0 6px" }}>
-                <span>Descrição</span><span>Qtd.</span><span style={{ textAlign: "right" }}>Valor unit.</span><span style={{ textAlign: "right" }}>Total</span><span>Tipo contábil</span><span>Centro de custo</span><span /><span />
+                <span>Descrição</span><span>Qtd.</span><span style={{ textAlign: "right" }}>Valor unit.</span><span style={{ textAlign: "right" }}>Total</span><span>Tipo contábil</span><span>Centro de custo</span><span>Tributos</span><span />
               </div>
               {itens.map((i) => {
                 const e = erros.itens[i.chave] || {};
@@ -461,11 +477,10 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
                         <option value="">Da nota</option>
                         {cadastros.centros.filter((c) => c.ativo || String(c.id) === i.centroCustoId).map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
                       </select>
-                      <button type="button" className="icon-btn" aria-label="Tributos do item" aria-expanded={i.aberto}
-                        title="Tributos e dados fiscais do item" onClick={() => atualizarItem(i.chave, { aberto: !i.aberto })}
-                        style={{ position: "relative", color: temFiscal(i.fiscal) ? "var(--primary)" : undefined }}>
-                        <Icone nome="chevronBaixo" tamanho={16} style={{ transform: i.aberto ? "rotate(180deg)" : "none", transition: "transform .15s" }} />
-                        {temFiscal(i.fiscal) && <span style={{ position: "absolute", top: 4, right: 4, width: 6, height: 6, borderRadius: "50%", background: "var(--primary)" }} />}
+                      <button type="button" className={`btn btn-ghost btn-tributos${contarFiscal(i.fiscal) ? " preenchido" : ""}`} aria-expanded={i.aberto}
+                        title="Tributos e dados fiscais do item (NCM, CFOP, ICMS, IPI, PIS, COFINS, ISS)" onClick={() => atualizarItem(i.chave, { aberto: !i.aberto })}>
+                        {i.aberto ? "Ocultar" : "Tributos"}{!i.aberto && contarFiscal(i.fiscal) > 0 && ` (${contarFiscal(i.fiscal)})`}
+                        <Icone nome="chevronBaixo" tamanho={13} style={{ transform: i.aberto ? "rotate(180deg)" : "none", transition: "transform .15s" }} />
                       </button>
                       {editavel ? (
                         <button type="button" className="icon-btn perigo" aria-label="Remover item" onClick={() => setItens((p) => (p.length > 1 ? p.filter((x) => x.chave !== i.chave) : [itemVazio()]))}>
@@ -483,7 +498,7 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
           </div>
 
           {/* Ajustes do total e tributos da nota */}
-          <h3 className="section-title">Valores e tributos da nota</h3>
+          <h3 className="section-title">Frete, seguro e desconto</h3>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: "0 12px" }}>
             {[["frete", "Frete"], ["seguro", "Seguro"], ["outras", "Outras despesas"], ["desconto", "Desconto"]].map(([k, rotulo]) => (
               <div key={k}>
@@ -493,23 +508,17 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
               </div>
             ))}
           </div>
-          <button type="button" className="link-btn" style={{ marginTop: 12, fontSize: 13, display: "inline-flex", alignItems: "center", gap: 6 }}
-            onClick={() => setTributosAbertos((v) => !v)} aria-expanded={tributosAbertos}>
-            <Icone nome="chevronBaixo" tamanho={14} style={{ transform: tributosAbertos ? "rotate(180deg)" : "none", transition: "transform .15s" }} />
-            {tributosAbertos ? "Ocultar tributos da nota" : "Informar tributos da nota (ICMS, IPI, PIS, COFINS, ISS, retenções)"}
-            {!tributosAbertos && temFiscal(form.fiscal) && <span className="pill pill-ok" style={{ marginLeft: 4 }}>preenchido</span>}
-          </button>
-          {tributosAbertos && (
-            <div className="painel">
-              {editavel && (
-                <div style={{ display: "flex", justifyContent: "flex-end", paddingTop: 12 }}>
-                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => setForm((p) => ({ ...p, fiscal: { ...p.fiscal, ...somarTributosDosItens(itens) } }))}
-                    title="Soma os tributos informados nos itens e preenche estes totais">Somar tributos dos itens</button>
-                </div>
-              )}
-              <TributosNota fiscal={form.fiscal} onChange={setFiscal} disabled={!editavel} />
-            </div>
-          )}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 12, flexWrap: "wrap" }}>
+            <h3 className="section-title">Tributos da nota</h3>
+            {editavel && (
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setForm((p) => ({ ...p, fiscal: { ...p.fiscal, ...somarTributosDosItens(itens) } }))}
+                title="Soma os tributos informados nos itens e preenche estes totais">Somar tributos dos itens</button>
+            )}
+          </div>
+          <div className="muted" style={{ fontSize: 12.5, marginTop: 4 }}>
+            IPI e ICMS ST <strong>somam no total</strong> da nota. Retenções (INSS, IRRF, CSLL, outras e ISS retido) <strong>saem do valor pago ao fornecedor</strong>. Os demais são informativos.
+          </div>
+          <TributosNota fiscal={form.fiscal} onChange={setFiscal} disabled={!editavel} />
 
           <div className="totais" aria-label="Totais da nota">
             <div><span>Total dos itens</span><span>{formatarMoeda(deCentavos(centItens))}</span></div>
@@ -529,6 +538,85 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
           </div>
           {mostrar("total") && <div style={{ ...msgErro, textAlign: "right" }}>{erros.total}</div>}
           <div className="muted" style={{ fontSize: 12, textAlign: "right", marginTop: 6 }}>O total é calculado automaticamente: não pode ser digitado.</div>
+
+          {/* Pagamento: condição + conta caixa → parcelas no Financeiro */}
+          <h3 className="section-title">Pagamento</h3>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "0 12px" }}>
+            <div>
+              <label style={{ ...lbl, marginTop: 4 }} htmlFor="nota-condicao">Condição de pagamento{podeAprovar ? " *" : ""}</label>
+              <div style={{ display: "flex", gap: 8 }}>
+                <select id="nota-condicao" style={{ ...estiloCampo(), flex: 1, minWidth: 0 }} value={form.condicaoId} {...desabilitado}
+                  onChange={(e) => (e.target.value === NOVA_CONDICAO ? setNovaCondicao(true) : setForm((p) => ({ ...p, condicaoId: e.target.value })))}>
+                  <option value="">— Selecione —</option>
+                  {cadastros.condicoes.filter((c) => c.ativo || String(c.id) === form.condicaoId).map((c) => (
+                    <option key={c.id} value={c.id}>{c.nome}{c.ativo ? "" : " (inativa)"}</option>
+                  ))}
+                  {editavel && podeAdministrar && <option value={NOVA_CONDICAO}>＋ Cadastrar nova condição…</option>}
+                </select>
+                {editavel && podeAdministrar && (
+                  <button type="button" className="btn btn-ghost" onClick={() => setNovaCondicao(true)}
+                    title="Cadastrar uma nova condição de pagamento sem sair desta tela" style={{ flex: "none", padding: "8px 12px" }}>
+                    <Icone nome="mais" tamanho={16} traco={2.2} /> Nova
+                  </button>
+                )}
+              </div>
+              {condicao
+                ? <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>{TIPOS_CONDICAO[condicao.tipo]}{condicao.forma_pagamento ? ` · ${FORMAS_PAGAMENTO[condicao.forma_pagamento]}` : ""} · {resumoCondicao(condicao)}</div>
+                : editavel && cadastros.condicoes.length === 0 && <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>Cadastre em Parâmetros → Condições de pagamento.</div>}
+            </div>
+            <div>
+              <label style={{ ...lbl, marginTop: 4 }}>Conta caixa (de onde sai o pagamento){podeAprovar ? " *" : ""}</label>
+              <select style={estiloCampo()} value={form.contaCaixaId} onChange={campo("contaCaixaId")} {...desabilitado}>
+                <option value="">— Selecione —</option>
+                {cadastros.caixas.filter((c) => c.ativo || String(c.id) === form.contaCaixaId).map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+              </select>
+              {caixaSelecionada
+                ? <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>Saldo atual: <strong style={{ color: Number(caixaSelecionada.saldo_atual) < 0 ? "var(--danger)" : "var(--text)" }}>{formatarMoeda(caixaSelecionada.saldo_atual)}</strong></div>
+                : editavel && cadastros.caixas.length === 0 && <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>Cadastre em Parâmetros → Contas caixa.</div>}
+            </div>
+          </div>
+
+          {titulos.length > 0 ? (
+            <div className="painel" style={{ paddingTop: 10 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 6 }}>
+                <span className="muted" style={{ fontSize: 12.5 }}>Lançamentos gerados no Financeiro</span>
+                <a href="#/financeiro/pagar" className="link-btn" style={{ fontSize: 12.5 }}>Abrir Contas a pagar</a>
+              </div>
+              <table className="parcelas">
+                <thead><tr><th>Parcela</th><th>Vencimento</th><th className="num">Valor</th><th>Situação</th><th>Pago em</th></tr></thead>
+                <tbody>
+                  {titulos.map((t) => {
+                    const sit = situacaoTitulo(t, hojeISO());
+                    return (
+                      <tr key={t.id}>
+                        <td>{t.parcela}/{t.total_parcelas}</td>
+                        <td>{formatarData(t.vencimento)}</td>
+                        <td className="num">{formatarMoeda(t.valor)}</td>
+                        <td><Pill tone={sit.tom}>{sit.rotulo}</Pill></td>
+                        <td>{t.data_pagamento ? `${formatarData(t.data_pagamento)} · ${formatarMoeda(t.valor_pago)}` : "—"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : status === "rascunho" && previa.length > 0 && (
+            <div className="painel" style={{ paddingTop: 10 }}>
+              <div className="muted" style={{ fontSize: 12.5, marginBottom: 6 }}>
+                {condicao.tipo === "a_vista"
+                  ? "Prévia: ao aprovar, o valor é dado como pago pela conta caixa da nota."
+                  : `Prévia: ao aprovar, ${previa.length === 1 ? "esta parcela vai" : `estas ${previa.length} parcelas vão`} para Financeiro → Contas a pagar.`}
+                {centRetencoes > 0 && " O valor é o líquido (total − retenções)."}
+              </div>
+              <table className="parcelas">
+                <thead><tr><th>Parcela</th><th>Vencimento</th><th className="num">Valor</th></tr></thead>
+                <tbody>
+                  {previa.slice(0, 12).map((p) => <tr key={p.parcela}><td>{p.parcela}/{previa.length}</td><td>{formatarData(p.vencimento)}</td><td className="num">{formatarMoeda(p.valor)}</td></tr>)}
+                  {previa.length > 12 && <tr><td colSpan={3} className="muted">… mais {previa.length - 12} parcela(s)</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           <label style={lbl}>Observações</label>
           <textarea style={{ ...estiloCampo(), minHeight: 52, resize: "vertical", fontFamily: "inherit" }} value={form.observacoes} onChange={campo("observacoes")} {...desabilitado} />
@@ -570,13 +658,16 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
       )}
 
       {novoFornecedor && <PessoaModal onSalvo={aoSalvarFornecedor} onFechar={() => setNovoFornecedor(false)} />}
+      {novaCondicao && <CondicaoForm condicao={null} onSalvo={aoSalvarCondicao} onFechar={() => setNovaCondicao(false)} />}
 
       {confirmacao === "aprovar" && (
         <Modal titulo="Aprovar nota?" largura={440} nivel={400} onFechar={() => setConfirmacao(null)}
           rodape={<><button className="btn btn-ghost" onClick={() => setConfirmacao(null)}>Voltar</button><button className="btn btn-primary" onClick={aprovar}>Sim, aprovar</button></>}>
           <p style={{ fontSize: 13.5, color: "var(--text-2)", margin: "4px 0 12px" }}>
-            Depois de aprovada, a nota <strong>não poderá mais ser editada</strong> — só cancelada, com motivo. O valor de{" "}
-            <strong>{formatarMoeda(deCentavos(totalCent))}</strong> sairá da conta caixa <strong>{caixaSelecionada?.nome}</strong>.
+            Depois de aprovada, a nota <strong>não poderá mais ser editada</strong> — só cancelada, com motivo.{" "}
+            {condicao?.tipo === "a_vista"
+              ? <>O valor de <strong>{formatarMoeda(deCentavos(centLiquido))}</strong> sairá agora da conta caixa <strong>{caixaSelecionada?.nome}</strong>.</>
+              : <>Serão geradas <strong>{previa.length} parcela(s)</strong> somando <strong>{formatarMoeda(deCentavos(centLiquido))}</strong> em Contas a pagar; o dinheiro sai da conta caixa quando cada parcela for paga.</>}
           </p>
         </Modal>
       )}
@@ -590,7 +681,7 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
         <Modal titulo="Cancelar nota aprovada" largura={460} nivel={400} onFechar={() => setConfirmacao(null)}
           rodape={<><button className="btn btn-ghost" onClick={() => setConfirmacao(null)}>Voltar</button>
             <button className="btn btn-danger" style={{ opacity: motivoCancel.trim().length < 5 ? 0.5 : 1 }} disabled={motivoCancel.trim().length < 5 || ocupado === "cancelando"} onClick={cancelar}>Cancelar nota</button></>}>
-          <p style={{ fontSize: 13.5, color: "var(--text-2)", margin: "4px 0 0" }}>O cancelamento é permanente, fica registrado e devolve o valor à conta caixa. Informe o motivo:</p>
+          <p style={{ fontSize: 13.5, color: "var(--text-2)", margin: "4px 0 0" }}>O cancelamento é permanente, fica registrado, cancela as parcelas em aberto e devolve à conta caixa o que foi pago na aprovação. Se alguma parcela já foi paga no Financeiro, estorne o pagamento antes. Informe o motivo:</p>
           <textarea autoFocus style={{ ...inp, minHeight: 70, marginTop: 8, marginBottom: 8, fontFamily: "inherit" }} value={motivoCancel} onChange={(e) => setMotivoCancel(e.target.value)} placeholder="Ex.: lançada em duplicidade (mín. 5 caracteres)" />
         </Modal>
       )}

@@ -149,7 +149,7 @@ input:disabled, select:disabled, textarea:disabled {
 /* ── Tabelas ── */
 .toolbar { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; padding: 16px; border-bottom: 1px solid var(--border); }
 .toolbar label { font-size: 12px; font-weight: 500; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
-.table-wrap { overflow-x: auto; }
+.table-wrap { overflow-x: auto; position: relative; } /* relative: o .sr-only (absolute) do cabeçalho "Ações" não vaza e cria rolagem lateral na página */
 .table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .table th {
   padding: 10px 16px; text-align: left; white-space: nowrap; background: var(--surface-2);
@@ -349,3 +349,36 @@ input:disabled, select:disabled, textarea:disabled {
   .param-item { padding: 6px 12px; border: 1px solid var(--border); background: var(--surface); }
   .param-item.ativo { border-color: var(--primary); }
 }
+
+/* ── Tributos em cartões (modelo do totvs-portal) ── */
+.tributos-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; margin-top: 8px; }
+.tributo { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); min-width: 0; }
+.tributo-rotulo { font-size: 12px; color: var(--muted); display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+.tributo-valor { font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.tributo-zerado .tributo-valor { color: var(--faint); font-weight: 400; }
+.tributo-editavel:focus-within { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+.tributo-campo { display: flex; align-items: baseline; gap: 6px; }
+.tributo-prefixo { font-size: 12px; color: var(--faint); flex: none; }
+.tributo-input { flex: 1; min-width: 0; border: 0; padding: 0; background: transparent; font: inherit; font-weight: 600; text-align: right; color: var(--text); font-variant-numeric: tabular-nums; outline: none; }
+.tributo-input:disabled { color: var(--muted); }
+.tributo-input::placeholder { color: var(--faint); font-weight: 400; }
+.tributo-marca { flex-direction: row; align-items: center; gap: 10px; font-size: 13px; color: var(--text-2); cursor: pointer; }
+.tributo-tag { font-size: 10px; font-weight: 600; padding: 0 6px; border-radius: 999px; border: 1px solid; line-height: 16px; }
+.tributo-tag.soma { background: var(--warn-soft); color: var(--warn-text); border-color: var(--warn-border); }
+.tributo-tag.retencao { background: var(--danger-soft); color: var(--danger-text); border-color: var(--danger-border); margin-left: 6px; }
+.btn-tributos { display: inline-flex; align-items: center; gap: 4px; padding: 6px 8px; font-size: 12px; white-space: nowrap; }
+.btn-tributos.preenchido { color: var(--primary-hover); border-color: var(--primary); }
+
+/* ── Financeiro ── */
+.parcelas { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.parcelas th { text-align: left; font-size: 11.5px; font-weight: 600; color: var(--muted); padding: 6px 10px; border-bottom: 1px solid var(--border); }
+.parcelas td { padding: 7px 10px; border-bottom: 1px solid var(--border); }
+.parcelas tr:last-child td { border-bottom: 0; }
+.parcelas .num { text-align: right; }
+.resumo-pagar { display: flex; flex-wrap: wrap; gap: 8px 20px; padding: 10px 12px; margin-top: 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); font-size: 13px; color: var(--text-2); }
+.resumo-pagar strong { color: var(--text); }
+.abas { display: flex; gap: 4px; padding: 0 16px; border-bottom: 1px solid var(--border); overflow-x: auto; }
+.aba { padding: 11px 12px; border: 0; background: none; font: inherit; font-size: 13.5px; font-weight: 550; color: var(--muted); border-bottom: 2px solid transparent; cursor: pointer; white-space: nowrap; }
+.aba:hover { color: var(--text); }
+.aba.ativa { color: var(--primary-hover); border-bottom-color: var(--primary); }
+.aba .contador { margin-left: 6px; font-size: 11.5px; padding: 0 7px; border-radius: 999px; background: var(--surface-3); color: var(--text-2); }
