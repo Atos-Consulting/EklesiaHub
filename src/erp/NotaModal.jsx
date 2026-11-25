@@ -15,7 +15,7 @@ import {
   TIPOS_NOTA, STATUS_NOTA, TOM_STATUS, formatarMoeda, formatarData, formatarTamanho, hojeISO,
   lerNumero, numeroParaCampo, paraCentavos, deCentavos, totalItem, validarAnexo, mascararDocumento,
 } from "./format";
-import { tamanhoNumero } from "./catalogoParametros";
+import { tamanhoNumero, usaContabilidade } from "./catalogoParametros";
 import {
   fiscalParaBanco, fiscalDoBanco, somarTributosDosItens, contarFiscal,
   chavesNumericasNota, chavesTextoNota, chavesMarcaNota, chavesNumericasItem, chavesTextoItem,
@@ -136,6 +136,8 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
   const erros = { itens: {} };
   const chave = limparChave(form.chaveAcesso);
   const tamNumero = tamanhoNumero(cadastros.parametros, form.tipo);
+  // Com a contabilidade desligada (Parâmetros → Módulos), o tipo contábil do item é opcional.
+  const contabil = usaContabilidade(cadastros.parametros);
   if (!form.numero.trim()) erros.numero = "Obrigatório";
   else if (form.numero.trim().length > tamNumero) erros.numero = `Máximo de ${tamNumero} caracteres para este tipo`;
   if (!form.fornecedorId) erros.fornecedorId = "Selecione o fornecedor";
@@ -152,7 +154,7 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
     if (!(lerNumero(i.quantidade) > 0)) e.quantidade = true;
     if (!(lerNumero(i.valorUnitario) >= 0)) e.valorUnitario = true;
     if (!(lerNumero(i.valorTotal) >= 0)) e.valorTotal = true;
-    if (!i.tipoId) e.tipoId = true;
+    if (contabil && !i.tipoId) e.tipoId = true;
     if (Object.keys(e).length) erros.itens[i.chave] = e;
   });
   const temErro = Object.keys(erros).some((k) => (k === "itens" ? Object.keys(erros.itens).length > 0 : erros[k]));
@@ -231,7 +233,7 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
       },
       itens: itensAtivos.map((i) => ({
         descricao: i.descricao.trim(), quantidade: lerNumero(i.quantidade), valor_unitario: lerNumero(i.valorUnitario),
-        valor_total: lerNumero(i.valorTotal), tipo_contabil_id: Number(i.tipoId), centro_custo_id: i.centroCustoId ? Number(i.centroCustoId) : null,
+        valor_total: lerNumero(i.valorTotal), tipo_contabil_id: i.tipoId ? Number(i.tipoId) : null, centro_custo_id: i.centroCustoId ? Number(i.centroCustoId) : null,
         fiscal: fiscalParaBanco(i.fiscal, { numeros: chavesNumericasItem, textos: chavesTextoItem }),
       })),
     };
@@ -448,14 +450,14 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
             <h3 className="section-title">Itens da nota</h3>
             {editavel && <button type="button" onClick={() => setItens((p) => [...p, itemVazio()])} className="btn btn-ghost btn-sm">+ Adicionar item</button>}
           </div>
-          {editavel && tiposAtivos.length === 0 && (
+          {editavel && contabil && tiposAtivos.length === 0 && (
             <div className="alert alert-warn" style={{ marginBottom: 8 }}><Icone nome="alerta" tamanho={16} /><span>Não há tipos contábeis ativos. Um Administrador precisa cadastrá-los em <strong>Parâmetros → Tipos contábeis</strong>.</span></div>
           )}
           {mostrar("itensVazios") && <div style={msgErro}>{erros.itensVazios}</div>}
           <div style={{ overflowX: "auto", paddingBottom: 4 }}>
             <div style={{ minWidth: 900 }}>
               <div className="itens-cabecalho" style={{ display: "grid", gridTemplateColumns: colunas, gap: 6, margin: "4px 0 6px" }}>
-                <span>Descrição</span><span>Qtd.</span><span style={{ textAlign: "right" }}>Valor unit.</span><span style={{ textAlign: "right" }}>Total</span><span>Tipo contábil</span><span>Centro de custo</span><span>Tributos</span><span />
+                <span>Descrição</span><span>Qtd.</span><span style={{ textAlign: "right" }}>Valor unit.</span><span style={{ textAlign: "right" }}>Total</span><span>Tipo contábil{!contabil && " (opcional)"}</span><span>Centro de custo</span><span>Tributos</span><span />
               </div>
               {itens.map((i) => {
                 const e = erros.itens[i.chave] || {};
@@ -470,7 +472,7 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
                       <input style={{ ...somenteLeitura, ...b("valorTotal") }} readOnly tabIndex={-1} placeholder="0,00" value={i.valorTotal} aria-label="Valor total do item (calculado)" title="Quantidade × valor unitário" />
                       <select style={{ ...estiloCampo(), ...b("tipoId") }} value={i.tipoId} onChange={(ev) => atualizarItem(i.chave, { tipoId: ev.target.value })} {...desabilitado}
                         aria-label="Tipo contábil" title={tipoDoItem ? descricaoTipo(tipoDoItem) : "Define as contas de débito e crédito da contabilização"}>
-                        <option value="">— Selecione —</option>
+                        <option value="">{contabil ? "— Selecione —" : "— Nenhum —"}</option>
                         {cadastros.tipos.filter((t) => t.ativo || String(t.id) === i.tipoId).map((t) => <option key={t.id} value={t.id}>{t.nome}{t.ativo ? "" : " (inativo)"}</option>)}
                       </select>
                       <select style={estiloCampo()} value={i.centroCustoId} onChange={(ev) => atualizarItem(i.chave, { centroCustoId: ev.target.value })} {...desabilitado} aria-label="Centro de custo do item">

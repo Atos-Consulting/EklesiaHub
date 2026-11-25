@@ -7,7 +7,7 @@ import PessoaModal from "./PessoaModal";
 import { lerNfeXml, decodificarChave, TAMANHO_MAX_XML } from "./nfe";
 import { buscarNotasExistentes, buscarCnpjEmpresa, salvarPessoa, salvarNota, enviarAnexo, mensagemErro } from "./db";
 import { formatarMoeda, formatarData, hojeISO, mascararDocumento, limparCnpj, soDigitos } from "./format";
-import { tamanhoNumero } from "./catalogoParametros";
+import { tamanhoNumero, usaContabilidade } from "./catalogoParametros";
 import ThOrdenavel from "./ThOrdenavel";
 import { useOrdenacao } from "./useOrdenacao";
 
@@ -29,6 +29,8 @@ const MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julh
 
 function PorArquivos({ perfil, cadastros, podeEditar, podeAprovar, podeAdministrar, onCadastrosMudaram }) {
   const tiposAtivos = cadastros.tipos.filter((t) => t.ativo);
+  // Com a contabilidade desligada (Parâmetros → Módulos), o tipo contábil é opcional.
+  const contabil = usaContabilidade(cadastros.parametros);
   const caixasAtivas = cadastros.caixas.filter((c) => c.ativo);
   const [tipoId, setTipoId] = useState("");
   const [centroId, setCentroId] = useState("");
@@ -145,7 +147,7 @@ function PorArquivos({ perfil, cadastros, podeEditar, podeAprovar, podeAdministr
           observacoes: `Importada do XML ${a.nome} (${d.modeloNome}).`,
         }, d.itens.map((i) => ({
           descricao: i.descricao, quantidade: i.quantidade, valor_unitario: i.valorUnitario, valor_total: i.valorTotal,
-          tipo_contabil_id: Number(tipoId), centro_custo_id: null, fiscal: i.fiscal,
+          tipo_contabil_id: tipoId ? Number(tipoId) : null, centro_custo_id: null, fiscal: i.fiscal,
         })));
 
         let avisoAnexo = "";
@@ -181,13 +183,13 @@ function PorArquivos({ perfil, cadastros, podeEditar, podeAprovar, podeAdministr
         <h2 style={{ fontSize: 15, fontWeight: 650 }}>Como as notas serão criadas</h2>
         <p className="muted" style={{ marginTop: 4 }}>
           Cada XML vira uma nota em <strong>rascunho</strong> (nunca aprovada automaticamente), com o fornecedor, os itens e o XML original anexado.
-          Escolha abaixo o tipo contábil dos itens (ele define débito e crédito) — você pode ajustar item a item antes de aprovar. Frete, desconto e tributos do XML já vão preenchidos.
+          {contabil ? "Escolha abaixo o tipo contábil dos itens (ele define débito e crédito) — você pode ajustar item a item antes de aprovar." : "O tipo contábil dos itens é opcional, porque a contabilidade está desligada."} Frete, desconto e tributos do XML já vão preenchidos.
         </p>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: "0 14px" }}>
           <div>
-            <label style={lbl} htmlFor="imp-tipo">Tipo contábil dos itens *</label>
+            <label style={lbl} htmlFor="imp-tipo">Tipo contábil dos itens{contabil ? " *" : " (opcional)"}</label>
             <select id="imp-tipo" style={inp} value={tipoId} onChange={(e) => setTipoId(e.target.value)}>
-              <option value="">— Selecione —</option>
+              <option value="">{contabil ? "— Selecione —" : "— Nenhum —"}</option>
               {tiposAtivos.map((t) => <option key={t.id} value={t.id}>{t.nome}</option>)}
             </select>
           </div>
@@ -297,9 +299,9 @@ function PorArquivos({ perfil, cadastros, podeEditar, podeAprovar, podeAdministr
           <div className="table-footer" style={{ alignItems: "center" }}>
             <span>{selecionadas.length} selecionada(s) · total <strong>{formatarMoeda(totalSelecionado)}</strong></span>
             <span style={{ display: "inline-flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-              {!tipoId && selecionadas.length > 0 && <span style={{ color: "var(--warn-text)" }}>Escolha o tipo contábil dos itens.</span>}
+              {contabil && !tipoId && selecionadas.length > 0 && <span style={{ color: "var(--warn-text)" }}>Escolha o tipo contábil dos itens.</span>}
               <button className="btn btn-ghost" onClick={() => setAnalises([])} disabled={importando}>Limpar lista</button>
-              <button className="btn btn-primary" onClick={importar} disabled={importando || !podeEditar || !tipoId || selecionadas.length === 0}>
+              <button className="btn btn-primary" onClick={importar} disabled={importando || !podeEditar || (contabil && !tipoId) || selecionadas.length === 0}>
                 {importando ? "Importando…" : `Importar ${selecionadas.length} nota(s) como rascunho`}
               </button>
             </span>
