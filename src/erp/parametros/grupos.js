@@ -1,5 +1,6 @@
 import ContasCaixa from "./ContasCaixa";
 import CondicoesPagamento from "./CondicoesPagamento";
+import Campanhas from "./Campanhas";
 import PlanoContas from "./PlanoContas";
 import TiposContabeis from "./TiposContabeis";
 import CentrosCusto from "./CentrosCusto";
@@ -14,6 +15,7 @@ export const GRUPOS_PARAMETROS = [
   { id: "financeiro", rotulo: "Financeiro", abas: [
     { id: "caixas", rotulo: "Contas caixa", Tela: ContasCaixa },
     { id: "condicoes", rotulo: "Condições de pagamento", Tela: CondicoesPagamento },
+    { id: "campanhas", rotulo: "Campanhas", Tela: Campanhas },
   ] },
   { id: "contabil", rotulo: "Contábil", abas: [
     { id: "contas", rotulo: "Plano de contas", Tela: PlanoContas },

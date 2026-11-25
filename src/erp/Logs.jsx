@@ -13,7 +13,7 @@ const TABELAS = {
   documentos_entrada: "Nota de entrada", documento_anexos: "Anexo de nota", pessoas: "Fornecedor / pessoa",
   titulos_financeiros: "Conta a pagar", pagamentos: "Pagamento", condicoes_pagamento: "Condição de pagamento",
   contas_caixa: "Conta caixa", plano_contas: "Plano de contas", tipos_contabeis: "Tipo contábil", centros_custo: "Centro de custo",
-  parametros: "Parâmetro", empresas: "Igreja", profiles: "Usuário",
+  parametros: "Parâmetro", empresas: "Igreja", profiles: "Usuário", entradas: "Dízimo / oferta", campanhas: "Campanha",
 };
 const ACOES = { criou: { rotulo: "Criou", tom: "ok" }, alterou: { rotulo: "Alterou", tom: "warn" }, excluiu: { rotulo: "Excluiu", tom: "danger" } };
 const OCULTOS = new Set(["id", "empresa_id", "user_id"]);

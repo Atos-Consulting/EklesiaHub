@@ -17,6 +17,7 @@ export default function ContasCaixa({ cadastros, onCadastrosMudaram }) {
     agencia: (c) => [c.agencia, c.numero_conta].filter(Boolean).join(" / "),
     conta: (c) => conta.get(c.conta_contabil_id)?.codigo,
     inicial: (c) => Number(c.saldo_inicial),
+    entradas: (c) => Number(c.total_entradas ?? 0),
     saidas: (c) => Number(c.total_saidas),
     saldo: (c) => Number(c.saldo_atual),
     situacao: (c) => (c.ativo ? "Ativo" : "Inativo"),
@@ -46,13 +47,14 @@ export default function ContasCaixa({ cadastros, onCadastrosMudaram }) {
             <ThOrdenavel chave="agencia" ordenacao={ordenacao}>Agência / Conta</ThOrdenavel>
             <ThOrdenavel chave="conta" ordenacao={ordenacao}>Conta contábil</ThOrdenavel>
             <ThOrdenavel chave="inicial" ordenacao={ordenacao} className="num">Saldo inicial</ThOrdenavel>
+            <ThOrdenavel chave="entradas" ordenacao={ordenacao} className="num">Entradas</ThOrdenavel>
             <ThOrdenavel chave="saidas" ordenacao={ordenacao} className="num">Saídas (pagamentos)</ThOrdenavel>
             <ThOrdenavel chave="saldo" ordenacao={ordenacao} className="num">Saldo atual</ThOrdenavel>
             <ThOrdenavel chave="situacao" ordenacao={ordenacao}>Situação</ThOrdenavel>
             <th className="acoes"><span className="sr-only">Ações</span></th>
           </tr></thead>
           <tbody>
-            {ordenacao.ordenadas.length === 0 && <tr><td className="vazio" colSpan={9}>Nenhuma conta caixa encontrada.</td></tr>}
+            {ordenacao.ordenadas.length === 0 && <tr><td className="vazio" colSpan={10}>Nenhuma conta caixa encontrada.</td></tr>}
             {ordenacao.ordenadas.map((c) => (
               <tr key={c.id} style={!c.ativo ? { color: "var(--faint)" } : undefined}>
                 <td style={{ fontWeight: 550 }}>{c.nome}<div className="muted" style={{ fontSize: 12, fontWeight: 400 }}>desde {formatarData(c.data_saldo_inicial)}</div></td>
@@ -60,6 +62,7 @@ export default function ContasCaixa({ cadastros, onCadastrosMudaram }) {
                 <td>{[c.agencia, c.numero_conta].filter(Boolean).join(" / ") || "—"}</td>
                 <td>{rotuloConta(conta.get(c.conta_contabil_id))}</td>
                 <td className="num">{formatarMoeda(c.saldo_inicial)}</td>
+                <td className="num">{formatarMoeda(c.total_entradas ?? 0)}</td>
                 <td className="num">{formatarMoeda(c.total_saidas)}</td>
                 <td className="num" style={{ fontWeight: 650, color: Number(c.saldo_atual) < 0 ? "var(--danger)" : undefined }}>{formatarMoeda(c.saldo_atual)}</td>
                 <td><Situacao ativo={c.ativo} /></td>

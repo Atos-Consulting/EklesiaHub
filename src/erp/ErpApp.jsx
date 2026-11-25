@@ -4,6 +4,7 @@ import Icone from "./Icone";
 import Marca from "./Marca";
 import NotasEntrada from "./NotasEntrada";
 import ContasPagar from "./ContasPagar";
+import Entradas from "./Entradas";
 import Logs from "./Logs";
 import Fornecedores from "./Fornecedores";
 import ImportarXml from "./ImportarXml";
@@ -24,8 +25,9 @@ const MODULOS = [
     previsto: ["Saldo de caixa e bancos", "Contas a pagar e a receber da semana", "Entradas x saídas do mês", "Resultado do período (superávit/déficit)", "Vendas da livraria e do bazar"] },
   { id: "administrativo", grupo: "Gestão", rotulo: "Administrativo", icone: "pasta", pronto: true,
     telas: [{ id: "notas", rotulo: "Notas de entrada" }, { id: "fornecedores", rotulo: "Fornecedores" }, { id: "importar", rotulo: "Importar XML" }] },
-  // Uma tela só (contas a pagar e pagas, por aba de situação).
-  { id: "financeiro", grupo: "Gestão", rotulo: "Financeiro", icone: "carteira", pronto: true },
+  // Contas a pagar (a pagar e pagas, por aba de situação) e entradas (dízimos, ofertas, campanhas).
+  { id: "financeiro", grupo: "Gestão", rotulo: "Financeiro", icone: "carteira", pronto: true,
+    telas: [{ id: "pagar", rotulo: "Contas a pagar" }, { id: "entradas", rotulo: "Dízimos e ofertas" }] },
   { id: "contabil", grupo: "Gestão", rotulo: "Contábil", icone: "calculadora", pronto: false, contabil: true,
     descricao: "Escrituração contábil integrada aos demais módulos.",
     previsto: ["Plano de contas editável", "Lançamentos em partidas dobradas", "Razão e balancete", "DRE e balanço patrimonial", "Contabilização automática das notas aprovadas"] },
@@ -186,7 +188,11 @@ export default function ErpApp({ perfil, onSair, onEmpresaTrocada }) {
     if (!cadastros) return <div className="carregando-linha"><div className="spinner" /> Carregando...</div>;
     if (modulo.id === "parametros") return <Parametros aba={tela?.id} perfil={perfil} cadastros={cadastros} onCadastrosMudaram={recarregarCadastros} />;
     if (modulo.id === "logs") return <Logs />;
-    if (modulo.id === "financeiro") return <ContasPagar cadastros={cadastros} podePagar={perm.pagar} onCadastrosMudaram={recarregarCadastros} />;
+    if (modulo.id === "financeiro") {
+      return tela?.id === "entradas"
+        ? <Entradas cadastros={cadastros} podeRegistrar={perm.pagar} onCadastrosMudaram={recarregarCadastros} />
+        : <ContasPagar cadastros={cadastros} podePagar={perm.pagar} onCadastrosMudaram={recarregarCadastros} />;
+    }
     const props = { cadastros, podeEditar: perm.lancar, podeAprovar: perm.aprovar, podeAdministrar: perm.administrar, onCadastrosMudaram: recarregarCadastros };
     if (tela?.id === "fornecedores") return <Fornecedores {...props} />;
     if (tela?.id === "importar") return <ImportarXml perfil={perfil} {...props} />;

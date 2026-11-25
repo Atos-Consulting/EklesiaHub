@@ -17,6 +17,9 @@ export function mensagemErro(e) {
   if (msg.includes("condicoes_pagamento_empresa_nome_uq")) return "Já existe uma condição de pagamento com este nome.";
   if (msg.includes("condicoes_pagamento_a_vista_ck")) return "Condição à vista tem uma parcela só, paga no ato.";
   if (msg.includes("pagamentos_ativo_uq")) return "Este título já foi pago.";
+  if (msg.includes("campanhas_empresa_nome_uq")) return "Já existe uma campanha com este nome.";
+  if (msg.includes("campanhas_periodo_ck")) return "A data de fim da campanha não pode ser antes do início.";
+  if (msg.includes("entradas_campanha_fk")) return "Esta campanha já recebeu entradas e não pode ser excluída. Desative-a.";
   if (msg.includes("empresas_cep_check")) return "CEP inválido: informe os 8 números.";
   if (msg.includes("empresas_email_check")) return "E-mail inválido.";
   if (msg.includes("empresas_uf_check")) return "UF inválida: use a sigla do estado (ex.: SP).";
@@ -34,7 +37,7 @@ export function mensagemErro(e) {
 // ── Cadastros-base ───────────────────────────────────────────────
 
 export async function fetchCadastros() {
-  const [contas, centros, fundos, pessoas, parametros, tipos, caixas, condicoes] = await Promise.all([
+  const [contas, centros, fundos, pessoas, parametros, tipos, caixas, condicoes, campanhas] = await Promise.all([
     supabase.from("plano_contas").select("id,codigo,nome,natureza,analitica,pai_id,ativo").order("codigo"),
     supabase.from("centros_custo").select("id,nome,ativo").order("nome"),
     supabase.from("fundos").select("id,nome,restrito,ativo").order("nome"),
@@ -43,12 +46,13 @@ export async function fetchCadastros() {
     supabase.from("tipos_contabeis").select("*").order("nome"),
     supabase.from("contas_caixa_saldo").select("*").order("nome"),
     supabase.from("condicoes_pagamento").select("*").order("nome"),
+    supabase.from("campanhas_saldo").select("*").order("nome"),
   ]);
-  const erro = [contas, centros, fundos, pessoas, parametros, tipos, caixas, condicoes].find((r) => r.error)?.error;
+  const erro = [contas, centros, fundos, pessoas, parametros, tipos, caixas, condicoes, campanhas].find((r) => r.error)?.error;
   if (erro) throw erro;
   return {
     contas: contas.data, centros: centros.data, fundos: fundos.data, pessoas: pessoas.data,
-    tipos: tipos.data, caixas: caixas.data, condicoes: condicoes.data,
+    tipos: tipos.data, caixas: caixas.data, condicoes: condicoes.data, campanhas: campanhas.data,
     // { chave: valor } — ex.: { "nota.numero_tamanho.nfe": "9" }
     parametros: Object.fromEntries(parametros.data.map((p) => [p.chave, p.valor])),
   };
@@ -216,6 +220,12 @@ export const salvarCondicaoPagamento = (id, { nome, tipo, formaPagamento, parcel
     parcelas: tipo === "a_vista" ? 1 : parcelas, dias_primeira: tipo === "a_vista" ? 0 : diasPrimeira, intervalo_dias: intervaloDias, ativo,
   });
 
+export const salvarCampanha = (id, { nome, descricao, meta, dataInicio, dataFim, ativo }) =>
+  gravar("campanhas", id, {
+    nome: nome.trim(), descricao: descricao.trim() || null, meta: meta || null,
+    data_inicio: dataInicio || null, data_fim: dataFim || null, ativo,
+  });
+
 // ── Notas de entrada ─────────────────────────────────────────────
 
 export async function listarNotas() {
@@ -327,6 +337,29 @@ export async function pagarTitulo(tituloId, { contaCaixaId, data, juros, multa, 
 
 export async function estornarPagamento(pagamentoId, motivo) {
   const { error } = await supabase.rpc("estornar_pagamento", { p_pagamento: pagamentoId, p_motivo: motivo.trim() });
+  if (error) throw error;
+}
+
+// ── Entradas: dízimos, ofertas e campanhas (v12) ─────────────────
+
+export async function listarEntradas({ de, ate }) {
+  let consulta = supabase.from("entradas_lista").select("*");
+  if (de) consulta = consulta.gte("data", de);
+  if (ate) consulta = consulta.lte("data", ate);
+  const { data, error } = await consulta.order("data", { ascending: false }).order("id", { ascending: false }).limit(3000);
+  if (error) throw error;
+  return data;
+}
+
+// dados: { tipo, data, valor, conta_caixa_id, forma_pagamento, pessoa_id, campanha_id, centro_custo_id, descricao }
+export async function registrarEntrada(dados) {
+  const { data, error } = await supabase.rpc("registrar_entrada", { p_dados: dados });
+  if (error) throw error;
+  return data;
+}
+
+export async function estornarEntrada(entradaId, motivo) {
+  const { error } = await supabase.rpc("estornar_entrada", { p_entrada: entradaId, p_motivo: motivo.trim() });
   if (error) throw error;
 }
 

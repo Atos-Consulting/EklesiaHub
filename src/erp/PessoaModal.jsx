@@ -5,7 +5,8 @@ import Icone from "./Icone";
 import { salvarPessoa, mensagemErro } from "./db";
 import { mascararDocumento, mascararDocumentoLivre, classificarDocumento } from "./format";
 
-// Cadastro de pessoa/empresa (usado por Fornecedores e pelo "+ Novo fornecedor" da nota).
+// Cadastro de pessoa/empresa (usado por Fornecedores, pelo "+ Novo fornecedor" da nota e pelo "+ Nova pessoa" das entradas).
+const ROTULO_PAPEL = { fornecedor: "fornecedor", membro: "membro", doador: "doador", cliente: "cliente" };
 export default function PessoaModal({ inicial, sugestao, papelPadrao = "fornecedor", onSalvo, onFechar }) {
   const [form, setForm] = useState(() => ({
     nome: inicial?.nome || sugestao?.nome || "",
@@ -53,7 +54,7 @@ export default function PessoaModal({ inicial, sugestao, papelPadrao = "forneced
 
   return (
     <Modal
-      titulo={inicial ? "Editar fornecedor" : "Novo fornecedor"}
+      titulo={`${inicial ? "Editar" : "Novo"} ${ROTULO_PAPEL[papelPadrao] ?? "cadastro"}`}
       onFechar={onFechar}
       fecharFora={false}
       nivel={300}

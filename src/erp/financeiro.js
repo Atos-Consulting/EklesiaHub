@@ -9,6 +9,10 @@ export const FORMAS_PAGAMENTO = {
   cartao_debito: "Cartão de débito", cheque: "Cheque", outro: "Outro",
 };
 
+// Entradas (v12): dízimos, ofertas, campanhas e outras. Boleto não entra (é forma de pagar, não de receber).
+export const TIPOS_ENTRADA = { dizimo: "Dízimo", oferta: "Oferta", campanha: "Campanha", outra: "Outra entrada" };
+export const FORMAS_RECEBIMENTO = Object.fromEntries(Object.entries(FORMAS_PAGAMENTO).filter(([k]) => k !== "boleto"));
+
 export const ORIGEM_PAGAMENTO = { manual: "Baixa no Financeiro", aprovacao: "À vista, na aprovação", migracao: "Nota anterior ao Financeiro" };
 
 // "3x · 1ª em 30 dias, a cada 30 dias"
