@@ -49,16 +49,41 @@ function resumir(linhas, lk) {
     } else if (c < 0) {
       let centro = null;
       let quem = ORIGENS_EXTRATO[l.origem] ?? l.origem;
-      if (l.origem === "pagamento") { const t = lk.pagos.get(l.ref_id); centro = t?.centro_custo_id ?? null; quem = t?.fornecedor_nome ?? "Pagamento"; }
+      let partes = null; // [{ centro, c }] quando o pagamento se divide pelos itens da nota
+      if (l.origem === "pagamento") {
+        const t = lk.pagos.get(l.ref_id);
+        centro = t?.centro_custo_id ?? null;
+        quem = t?.fornecedor_nome ?? "Pagamento";
+        partes = dividirPorItens(-c, lk.itens.get(t?.documento_id), centro);
+      }
       if (l.origem === "saida") { centro = lk.movimentos.get(l.ref_id)?.centro_custo_id ?? null; quem = "Saídas avulsas"; }
-      const g = somaEm(saidas, centro ?? SEM_CENTRO, { filhos: new Map() }, -c);
-      g.filhos.set(quem, (g.filhos.get(quem) ?? 0) - c);
+      for (const p of partes ?? [{ centro, c: -c }]) {
+        const g = somaEm(saidas, p.centro ?? SEM_CENTRO, { filhos: new Map() }, p.c);
+        g.filhos.set(quem, (g.filhos.get(quem) ?? 0) + p.c);
+      }
     } else {
       somaEm(entradas, "outra", { ordem: ORDEM_ENTRADA.outra, rotulo: "Outras entradas" }, c);
     }
   }
   const total = (mapa) => [...mapa.values()].reduce((a, x) => a + x.c, 0);
   return { entradas, saidas, contas, totalEntradas: total(entradas), totalSaidas: total(saidas) };
+}
+
+// Divide um valor (centavos) pelos centros de custo dos itens da nota, na proporção do total de cada item.
+// Item sem centro (notas de antes da v17) fica com o centro do título. A sobra de centavos vai para a maior parte.
+function dividirPorItens(centavos, itens, centroTitulo) {
+  if (!itens?.length) return null;
+  const pesos = new Map();
+  for (const i of itens) {
+    const k = i.centro_custo_id ?? centroTitulo ?? null;
+    pesos.set(k, (pesos.get(k) ?? 0) + paraCentavos(i.valor_total));
+  }
+  const total = [...pesos.values()].reduce((a, v) => a + v, 0);
+  if (pesos.size < 2 || total <= 0) return [{ centro: [...pesos.keys()][0], c: centavos }];
+  const partes = [...pesos.entries()].map(([centro, peso]) => ({ centro, c: Math.floor((centavos * peso) / total) }));
+  const sobra = centavos - partes.reduce((a, p) => a + p.c, 0);
+  partes.sort((a, b) => b.c - a.c)[0].c += sobra;
+  return partes;
 }
 
 function Variacao({ atual, anterior }) {
@@ -97,6 +122,7 @@ export default function RelatorioMes({ cadastros, perfil }) {
       entradas: new Map(dados.entradas.map((e) => [e.id, e])),
       pagos: new Map(dados.pagos.map((t) => [t.pagamento_id, t])),
       movimentos: new Map(dados.movimentos.map((m) => [m.id, m])),
+      itens: dados.itensNotas.reduce((mapa, i) => mapa.set(i.documento_id, [...(mapa.get(i.documento_id) ?? []), i]), new Map()),
     };
     const atual = resumir(dados.linhas.filter((l) => l.data >= periodo.de), lk);
     const anterior = resumir(dados.linhas.filter((l) => l.data < periodo.de), lk);
@@ -241,7 +267,7 @@ export default function RelatorioMes({ cadastros, perfil }) {
               <tfoot><tr><td>Total de saídas</td><td className="num">{moeda(rel.atual.totalSaidas)}</td><td className="num">{moeda(rel.anterior.totalSaidas)}</td></tr></tfoot>
             </table>
             {rel.semCentro > 0 && (
-              <p className="rel-nota">{moeda(rel.semCentro)} em saídas sem centro de custo: notas aprovadas antes da regra nova ou saídas avulsas lançadas sem centro.</p>
+              <p className="rel-nota">{moeda(rel.semCentro)} em saídas sem centro de custo: notas antigas sem centro de custo ou saídas avulsas lançadas sem centro.</p>
             )}
           </section>
 

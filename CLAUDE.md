@@ -31,7 +31,7 @@ O EklesiaHub hoje é **só um ERP multiempresa de igreja** (o `README.md` ainda 
 ### Dinheiro e notas
 
 - Notas de entrada: rascunho → aprovada → cancelada. Nota aprovada é imutável. O total é calculado no banco e o cliente não digita.
-- Desde a v15, aprovar a nota exige centro de custo **ativo** no cabeçalho (os títulos herdam esse centro). O rascunho e o XML importado podem ficar sem; notas aprovadas antes não mudam. A tela repete a regra em `pedirAprovacao()` do `NotaModal.jsx`.
+- Centro de custo é **por item** (v17; a v15 exigia no cabeçalho): aprovar exige centro ativo em todos os itens, e o banco grava no cabeçalho o centro comum dos itens (ou nulo, se forem diferentes); os títulos herdam do cabeçalho. Na tela não há mais campo no cabeçalho: escolher o centro de um item preenche os itens de baixo ainda vazios, e item novo copia o anterior. O Relatório do mês divide cada pagamento de nota pelos centros dos itens (`dividirPorItens`). O rascunho e o XML importado podem ficar sem. A tela repete a regra em `pedirAprovacao()` do `NotaModal.jsx`. "Natureza da operação" só aparece (só leitura) quando veio do XML.
 - Cada item tem um tipo contábil (define débito e crédito), obrigatório enquanto o parâmetro `contabilidade.ativa` não for `false`. Com a contabilidade desligada (v11), o item pode ficar sem tipo e sem contas; a regra está em `usa_contabilidade()` no banco e em `usaContabilidade()` na tela.
 - Use `numeric`, imutabilidade e estorno em vez de edição. O sistema não substitui o contador: o plano de contas semeado é só exemplo.
 - Aprovar a nota gera os títulos do Financeiro (`titulos_financeiros`, contas a pagar) conforme a condição de pagamento, no valor **líquido** (total − retenções). À vista já nasce pago pela conta caixa da nota; parcelado fica em aberto até a baixa (`pagar_titulo`). O saldo da conta caixa desconta os **pagamentos** não estornados (`contas_caixa_saldo`). Títulos e pagamentos só são gravados por funções do banco; cancelar nota com parcela paga manualmente exige estornar antes. A prévia das parcelas na tela (`src/erp/financeiro.js`) repete a conta de `gerar_titulos_nota`: mudou uma, mude a outra.
@@ -53,7 +53,7 @@ O catálogo fica em `src/erp/catalogoParametros.js`. **Não** chame o arquivo de
 
 ## Migrations
 
-Arquivos SQL soltos na raiz, rodados **à mão no SQL Editor** em ordem: `schema.sql` → `migration_v2` → `v3` (Kids) → `v4_erp` → `v5_multiempresa` → `v6_parametros_fiscal` → `v7_niveis_usuarios` → `v8_financeiro` → `v9_trocar_empresa` → `v10_cadastro_logs` → `v11_contabilidade_opcional` → `v12_entradas` → `v13_movimentos_caixa` → `v14_contas_receber` → `v15_centro_custo_obrigatorio` → `v16_entradas_usuario`. Não presuma que a última já foi aplicada no banco real. A UI que depende dela quebra até ser aplicada. Teste migrations novas com dados legados já aprovados, porque os gatilhos de imutabilidade podem barrar o backfill.
+Arquivos SQL soltos na raiz, rodados **à mão no SQL Editor** em ordem: `schema.sql` → `migration_v2` → `v3` (Kids) → `v4_erp` → `v5_multiempresa` → `v6_parametros_fiscal` → `v7_niveis_usuarios` → `v8_financeiro` → `v9_trocar_empresa` → `v10_cadastro_logs` → `v11_contabilidade_opcional` → `v12_entradas` → `v13_movimentos_caixa` → `v14_contas_receber` → `v15_centro_custo_obrigatorio` → `v16_entradas_usuario` → `v17_centro_custo_itens`. Não presuma que a última já foi aplicada no banco real. A UI que depende dela quebra até ser aplicada. Teste migrations novas com dados legados já aprovados, porque os gatilhos de imutabilidade podem barrar o backfill.
 
 ## BMAD
 

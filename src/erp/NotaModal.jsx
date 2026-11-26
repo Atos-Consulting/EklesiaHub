@@ -51,7 +51,7 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
     const caixasAtivas = cadastros.caixas.filter((c) => c.ativo);
     return {
       tipo: "nfe", numero: "", serie: "", chaveAcesso: "", fornecedorId: "",
-      dataEmissao: hojeISO(), dataEntrada: hojeISO(), centroCustoId: "",
+      dataEmissao: hojeISO(), dataEntrada: hojeISO(),
       contaCaixaId: caixasAtivas.length === 1 ? String(caixasAtivas[0].id) : "",
       condicaoId: condicaoPadrao(cadastros.condicoes),
       naturezaOperacao: "", observacoes: "",
@@ -70,6 +70,7 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
   const [confirmacao, setConfirmacao] = useState(null); // "aprovar" | "cancelar" | "excluir"
   const [motivoCancel, setMotivoCancel] = useState("");
   const [novoFornecedor, setNovoFornecedor] = useState(false);
+  const [marcarCentro, setMarcarCentro] = useState(false); // destaca itens sem centro depois de tentar aprovar
   const inputArquivo = useRef(null);
 
   function aplicar({ nota: n, itens: its, anexos: ax, titulos: tts }) {
@@ -77,7 +78,6 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
     setForm({
       tipo: n.tipo, numero: n.numero, serie: n.serie || "", chaveAcesso: n.chave_acesso || "",
       fornecedorId: String(n.fornecedor_id), dataEmissao: n.data_emissao, dataEntrada: n.data_entrada,
-      centroCustoId: n.centro_custo_id ? String(n.centro_custo_id) : "",
       contaCaixaId: n.conta_caixa_id ? String(n.conta_caixa_id) : "",
       condicaoId: n.condicao_pagamento_id ? String(n.condicao_pagamento_id) : "",
       naturezaOperacao: n.natureza_operacao || "", observacoes: n.observacoes || "",
@@ -89,7 +89,8 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
       ? its.map((i) => ({
           chave: crypto.randomUUID(), descricao: i.descricao, quantidade: campoTexto(Number(i.quantidade)),
           valorUnitario: numeroParaCampo(Number(i.valor_unitario)), valorTotal: numeroParaCampo(Number(i.valor_total)),
-          tipoId: i.tipo_contabil_id ? String(i.tipo_contabil_id) : "", centroCustoId: i.centro_custo_id ? String(i.centro_custo_id) : "",
+          tipoId: i.tipo_contabil_id ? String(i.tipo_contabil_id) : "",
+          centroCustoId: String(i.centro_custo_id ?? n.centro_custo_id ?? ""), // antes da v17 o centro ficava no cabeçalho
           fiscal: fiscalDoBanco(i.fiscal), aberto: false,
         }))
       : [itemVazio()]);
@@ -123,6 +124,8 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
 
   // ── Totais: o total da nota NÃO é digitado, é calculado ──
   const itensAtivos = itens.filter((i) => !itemEmBranco(i));
+  const centrosDosItens = [...new Set(itensAtivos.map((i) => i.centroCustoId))];
+  const centroComum = centrosDosItens.length === 1 ? centrosDosItens[0] : ""; // vai para o cabeçalho (o banco confere na aprovação)
   const centItens = itensAtivos.reduce((acc, i) => acc + paraCentavos(dinheiro(i.valorTotal)), 0);
   const centIpi = cent(form.fiscal.ipi);
   const centSt = cent(form.fiscal.icms_st);
@@ -176,6 +179,13 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
       return novoItem;
     }));
   }
+  // Centro de custo do item: os itens de baixo ainda sem centro recebem o mesmo (não precisa repetir).
+  function escolherCentro(chaveItem, centro) {
+    setItens((prev) => {
+      const pos = prev.findIndex((i) => i.chave === chaveItem);
+      return prev.map((i, n) => (n === pos || (n > pos && !i.centroCustoId) ? { ...i, centroCustoId: centro } : i));
+    });
+  }
   const setFiscalItem = (chaveItem, k, v) => setItens((prev) => prev.map((i) => (i.chave === chaveItem ? { ...i, fiscal: { ...i.fiscal, [k]: v } } : i)));
 
   // ── Anexos ──
@@ -225,7 +235,7 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
       doc: {
         tipo: form.tipo, numero: form.numero.trim(), serie: form.serie.trim(), chave_acesso: chave,
         fornecedor_id: Number(form.fornecedorId), data_emissao: form.dataEmissao, data_entrada: form.dataEntrada,
-        centro_custo_id: form.centroCustoId || null, conta_caixa_id: form.contaCaixaId || null,
+        centro_custo_id: centroComum ? Number(centroComum) : null, conta_caixa_id: form.contaCaixaId || null,
         condicao_pagamento_id: form.condicaoId || null,
         natureza_operacao: form.naturezaOperacao.trim(), observacoes: form.observacoes.trim(),
         valor_frete: dinheiro(form.frete), valor_seguro: dinheiro(form.seguro), valor_outras: dinheiro(form.outras), valor_desconto: dinheiro(form.desconto),
@@ -270,8 +280,8 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
     setTentou(true);
     setErro("");
     if (temErro) setErro("Revise os campos destacados em vermelho.");
-    else if (!form.centroCustoId) setErro("Informe o centro de custo da nota para aprová-la.");
-    else if (!cadastros.centros.find((c) => String(c.id) === form.centroCustoId)?.ativo) setErro("O centro de custo da nota está inativo. Escolha outro para aprová-la.");
+    else if (itensAtivos.some((i) => !i.centroCustoId)) { setMarcarCentro(true); setErro("Informe o centro de custo de todos os itens para aprovar a nota."); }
+    else if (itensAtivos.some((i) => !cadastros.centros.find((c) => String(c.id) === i.centroCustoId)?.ativo)) { setMarcarCentro(true); setErro("Há item com centro de custo inativo. Troque o centro para aprovar a nota."); }
     else if (!form.contaCaixaId) setErro("Informe a conta caixa da nota para aprová-la.");
     else if (!form.condicaoId) setErro("Informe a condição de pagamento da nota para aprová-la.");
     else if (centLiquido <= 0) setErro("As retenções não podem ser iguais ou maiores que o total da nota.");
@@ -398,10 +408,12 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
               <input type="date" style={estiloCampo("dataEntrada")} value={form.dataEntrada} onChange={campo("dataEntrada")} {...desabilitado} />
               {mostrar("dataEntrada") && <div style={msgErro}>{erros.dataEntrada}</div>}
             </div>
-            <div style={{ gridColumn: "span 2" }}>
-              <label style={lbl}>Natureza da operação</label>
-              <input style={estiloCampo()} value={form.naturezaOperacao} onChange={campo("naturezaOperacao")} placeholder="Ex.: Compra para uso e consumo" {...desabilitado} />
-            </div>
+            {form.naturezaOperacao && ( // só aparece quando veio do XML; não é preciso informar à mão
+              <div style={{ gridColumn: "span 2" }}>
+                <label style={lbl}>Natureza da operação (do XML)</label>
+                <input style={{ ...inp, background: "var(--surface-2)" }} value={form.naturezaOperacao} readOnly tabIndex={-1} />
+              </div>
+            )}
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "0 12px" }}>
@@ -429,13 +441,6 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
               )}
               {mostrar("fornecedorId") && <div style={msgErro}>{erros.fornecedorId}</div>}
             </div>
-            <div>
-              <label style={lbl}>Centro de custo{podeAprovar ? " *" : ""}</label>
-              <select style={estiloCampo()} value={form.centroCustoId} onChange={campo("centroCustoId")} {...desabilitado}>
-                <option value="">{editavel ? "— Selecione (obrigatório para aprovar) —" : "— Nenhum —"}</option>
-                {cadastros.centros.filter((c) => c.ativo || String(c.id) === form.centroCustoId).map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
-              </select>
-            </div>
           </div>
 
           {form.tipo === "nfe" && (
@@ -450,7 +455,7 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
           {/* Itens */}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
             <h3 className="section-title">Itens da nota</h3>
-            {editavel && <button type="button" onClick={() => setItens((p) => [...p, itemVazio()])} className="btn btn-ghost btn-sm">+ Adicionar item</button>}
+            {editavel && <button type="button" onClick={() => setItens((p) => [...p, { ...itemVazio(), centroCustoId: p.at(-1)?.centroCustoId ?? "" }])} className="btn btn-ghost btn-sm">+ Adicionar item</button>}
           </div>
           {editavel && contabil && tiposAtivos.length === 0 && (
             <div className="alert alert-warn" style={{ marginBottom: 8 }}><Icone nome="alerta" tamanho={16} /><span>Não há tipos contábeis ativos. Um Administrador precisa cadastrá-los em <strong>Parâmetros → Tipos contábeis</strong>.</span></div>
@@ -459,7 +464,7 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
           <div style={{ overflowX: "auto", paddingBottom: 4 }}>
             <div style={{ minWidth: 900 }}>
               <div className="itens-cabecalho" style={{ display: "grid", gridTemplateColumns: colunas, gap: 6, margin: "4px 0 6px" }}>
-                <span>Descrição</span><span>Qtd.</span><span style={{ textAlign: "right" }}>Valor unit.</span><span style={{ textAlign: "right" }}>Total</span><span>Tipo contábil{!contabil && " (opcional)"}</span><span>Centro de custo</span><span>Tributos</span><span />
+                <span>Descrição</span><span>Qtd.</span><span style={{ textAlign: "right" }}>Valor unit.</span><span style={{ textAlign: "right" }}>Total</span><span>Tipo contábil{!contabil && " (opcional)"}</span><span>Centro de custo{podeAprovar ? " *" : ""}</span><span>Tributos</span><span />
               </div>
               {itens.map((i) => {
                 const e = erros.itens[i.chave] || {};
@@ -477,8 +482,9 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
                         <option value="">{contabil ? "— Selecione —" : "— Nenhum —"}</option>
                         {cadastros.tipos.filter((t) => t.ativo || String(t.id) === i.tipoId).map((t) => <option key={t.id} value={t.id}>{t.nome}{t.ativo ? "" : " (inativo)"}</option>)}
                       </select>
-                      <select style={estiloCampo()} value={i.centroCustoId} onChange={(ev) => atualizarItem(i.chave, { centroCustoId: ev.target.value })} {...desabilitado} aria-label="Centro de custo do item">
-                        <option value="">Da nota</option>
+                      <select style={{ ...estiloCampo(), ...(marcarCentro && !i.centroCustoId && !itemEmBranco(i) ? { borderColor: "var(--danger)" } : {}) }} value={i.centroCustoId}
+                        onChange={(ev) => escolherCentro(i.chave, ev.target.value)} {...desabilitado} aria-label="Centro de custo do item">
+                        <option value="">— Selecione —</option>
                         {cadastros.centros.filter((c) => c.ativo || String(c.id) === i.centroCustoId).map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
                       </select>
                       <button type="button" className={`btn btn-ghost btn-tributos${contarFiscal(i.fiscal) ? " preenchido" : ""}`} aria-expanded={i.aberto}

@@ -446,7 +446,7 @@ export async function carregarRelatorioMes(contaIds, { deAnt, de, ate }) {
   const emAberto = `status.eq.aberto,data_pagamento.gt.${ate}`;
   const [linhas, pagos, recebidos, movimentos, entradas, abPagar, abReceber, ...saldos] = await Promise.all([
     supabase.from("extrato_caixa").select("*").gte("data", deAnt).lte("data", ate).order("data").limit(20000),
-    supabase.from("titulos_pagar").select("pagamento_id, centro_custo_id, fornecedor_nome").not("pagamento_id", "is", null)
+    supabase.from("titulos_pagar").select("pagamento_id, documento_id, centro_custo_id, fornecedor_nome").not("pagamento_id", "is", null)
       .gte("data_pagamento", deAnt).lte("data_pagamento", ate).limit(20000),
     supabase.from("titulos_receber").select("pagamento_id, descricao, fornecedor_nome").not("pagamento_id", "is", null)
       .gte("data_pagamento", deAnt).lte("data_pagamento", ate).limit(20000),
@@ -468,7 +468,16 @@ export async function carregarRelatorioMes(contaIds, { deAnt, de, ate }) {
   ]);
   if (cPagar.error) throw cPagar.error;
   if (cReceber.error) throw cReceber.error;
+  // Itens das notas pagas no período: o centro de custo é por item (v17), e o pagamento se divide por eles.
+  const docIds = [...new Set(pagos.data.map((t) => t.documento_id).filter(Boolean))];
+  const itens = [];
+  for (let i = 0; i < docIds.length; i += 200) {
+    const r = await supabase.from("documento_entrada_itens").select("documento_id, centro_custo_id, valor_total").in("documento_id", docIds.slice(i, i + 200)).limit(20000);
+    if (r.error) throw r.error;
+    itens.push(...r.data);
+  }
   return {
+    itensNotas: itens,
     linhas: linhas.data, pagos: pagos.data, recebidos: recebidos.data, movimentos: movimentos.data, entradas: entradas.data,
     abertoPagar: [...abPagar.data, ...cPagar.data], abertoReceber: [...abReceber.data, ...cReceber.data],
     saldos: contaIds.map((id, i) => ({ conta_caixa_id: id, anterior: Number(saldos[2 * i].data ?? 0), final: Number(saldos[2 * i + 1].data ?? 0) })),

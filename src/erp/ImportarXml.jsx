@@ -147,7 +147,7 @@ function PorArquivos({ perfil, cadastros, podeEditar, podeAprovar, podeAdministr
           observacoes: `Importada do XML ${a.nome} (${d.modeloNome}).`,
         }, d.itens.map((i) => ({
           descricao: i.descricao, quantidade: i.quantidade, valor_unitario: i.valorUnitario, valor_total: i.valorTotal,
-          tipo_contabil_id: tipoId ? Number(tipoId) : null, centro_custo_id: null, fiscal: i.fiscal,
+          tipo_contabil_id: tipoId ? Number(tipoId) : null, centro_custo_id: centroId ? Number(centroId) : null, fiscal: i.fiscal,
         })));
 
         let avisoAnexo = "";
@@ -194,7 +194,7 @@ function PorArquivos({ perfil, cadastros, podeEditar, podeAprovar, podeAdministr
             </select>
           </div>
           <div>
-            <label style={lbl} htmlFor="imp-centro">Centro de custo</label>
+            <label style={lbl} htmlFor="imp-centro">Centro de custo dos itens</label>
             <select id="imp-centro" style={inp} value={centroId} onChange={(e) => setCentroId(e.target.value)}>
               <option value="">— Nenhum —</option>
               {cadastros.centros.filter((c) => c.ativo).map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
