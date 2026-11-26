@@ -8,7 +8,7 @@ import ThOrdenavel from "./ThOrdenavel";
 import { useOrdenacao } from "./useOrdenacao";
 import { listarEntradas, registrarEntrada, estornarEntrada, mensagemErro } from "./db";
 import { formatarMoeda, formatarData, hojeISO, lerNumero, somarValores, mascararDocumento } from "./format";
-import { TIPOS_ENTRADA, FORMAS_RECEBIMENTO } from "./financeiro";
+import { TIPOS_ENTRADA, TIPOS_ENTRADA_NOVA, FORMAS_RECEBIMENTO } from "./financeiro";
 
 const SITUACOES = [{ id: "validas", rotulo: "Válidas" }, { id: "estornadas", rotulo: "Estornadas" }, { id: "todas", rotulo: "Todas" }];
 const naSituacao = (e, s) => s === "todas" || (s === "validas" ? !e.estornado : e.estornado);
@@ -40,7 +40,7 @@ function Indicador({ icone, rotulo, valor, sub }) {
 }
 
 // Financeiro → Dízimos e ofertas. Cada entrada soma no saldo da conta caixa; errou, estorna e lança de novo.
-export default function Entradas({ cadastros, podeRegistrar, onCadastrosMudaram }) {
+export default function Entradas({ cadastros, podeRegistrar, podeEstornar, onCadastrosMudaram }) {
   const [filtros, setFiltros] = useState(() => ({ de: inicioDoMes(), ate: hojeISO(), busca: "", tipo: "", caixa: "" }));
   const [situacao, setSituacao] = useState("validas");
   const [resultado, setResultado] = useState({ chave: null, lista: [], erro: "" });
@@ -84,12 +84,12 @@ export default function Entradas({ cadastros, podeRegistrar, onCadastrosMudaram 
 
   const f = (k) => (e) => setFiltros((p) => ({ ...p, [k]: e.target.value }));
   const totalLista = somarValores(filtradas.filter((e) => !e.estornado).map((e) => Number(e.valor)));
-  const colunas = podeRegistrar ? 7 : 6;
+  const colunas = podeEstornar ? 7 : 6;
 
   return (
     <div>
       <div className="page-header">
-        <Header title="Dízimos e ofertas" subtitle="Entradas de dinheiro na igreja: dízimos, ofertas, campanhas e outras. Cada entrada soma no saldo da conta caixa que recebeu. Uma entrada registrada não é editada: se houver erro, estorne (com motivo) e lance de novo." />
+        <Header title="Dízimos e ofertas" subtitle="Dízimos, ofertas e campanhas. Cada entrada soma no saldo da conta caixa que recebeu. Uma entrada registrada não é editada: se houver erro, um Supervisor ou Administrador estorna (com motivo) e ela é lançada de novo. Outros valores (rendimento, venda, reembolso) entram em Caixa, como entrada avulsa." />
         {podeRegistrar && (
           <button className="btn btn-primary" onClick={() => setAcao({ tipo: "nova" })}><Icone nome="mais" tamanho={16} traco={2.2} /> Nova entrada</button>
         )}
@@ -147,7 +147,7 @@ export default function Entradas({ cadastros, podeRegistrar, onCadastrosMudaram 
               <ThOrdenavel chave="caixa" ordenacao={ordenacao}>Conta caixa</ThOrdenavel>
               <ThOrdenavel chave="forma" ordenacao={ordenacao}>Forma</ThOrdenavel>
               <ThOrdenavel chave="valor" ordenacao={ordenacao} className="num">Valor</ThOrdenavel>
-              {podeRegistrar && <th className="acoes"><span className="sr-only">Ações</span></th>}
+              {podeEstornar && <th className="acoes"><span className="sr-only">Ações</span></th>}
             </tr></thead>
             <tbody>
               {entradas === null && !erro && <tr><td className="vazio" colSpan={colunas}>Carregando...</td></tr>}
@@ -166,7 +166,7 @@ export default function Entradas({ cadastros, podeRegistrar, onCadastrosMudaram 
                   <td>{e.conta_caixa_nome}</td>
                   <td>{FORMAS_RECEBIMENTO[e.forma_pagamento] ?? e.forma_pagamento}</td>
                   <td className="num" style={e.estornado ? { textDecoration: "line-through" } : { fontWeight: 550 }}>{formatarMoeda(e.valor)}</td>
-                  {podeRegistrar && (
+                  {podeEstornar && (
                     <td className="acoes" onClick={(ev) => ev.stopPropagation()}>
                       {!e.estornado && <button type="button" className="btn btn-ghost btn-sm" onClick={() => setAcao({ tipo: "estornar", entrada: e })}>Estornar</button>}
                     </td>
@@ -186,7 +186,7 @@ export default function Entradas({ cadastros, podeRegistrar, onCadastrosMudaram 
 
       {acao?.tipo === "nova" && <EntradaModal cadastros={cadastros} onFechar={() => setAcao(null)} onRegistrada={atualizar} onCadastrosMudaram={onCadastrosMudaram} />}
       {acao?.tipo === "ver" && (
-        <DetalheModal entrada={acao.entrada} cadastros={cadastros} podeEstornar={podeRegistrar} onFechar={() => setAcao(null)}
+        <DetalheModal entrada={acao.entrada} cadastros={cadastros} podeEstornar={podeEstornar} onFechar={() => setAcao(null)}
           onEstornar={() => setAcao({ tipo: "estornar", entrada: acao.entrada })} />
       )}
       {acao?.tipo === "estornar" && (
@@ -270,7 +270,7 @@ function EntradaModal({ cadastros, onFechar, onRegistrada, onCadastrosMudaram })
           </div>
         )}
         <div className="abas" role="radiogroup" aria-label="Tipo de entrada" style={{ margin: "0 0 4px", padding: 0 }}>
-          {Object.entries(TIPOS_ENTRADA).map(([v, r]) => (
+          {Object.entries(TIPOS_ENTRADA_NOVA).map(([v, r]) => (
             <button key={v} type="button" role="radio" aria-checked={f.tipo === v} className={`aba${f.tipo === v ? " ativa" : ""}`} onClick={() => setF((p) => ({ ...p, tipo: v }))}>{r}</button>
           ))}
         </div>

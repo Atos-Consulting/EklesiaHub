@@ -199,7 +199,7 @@ export default function ErpApp({ perfil, onSair, onEmpresaTrocada }) {
     if (modulo.id === "parametros") return <Parametros aba={tela?.id} perfil={perfil} cadastros={cadastros} onCadastrosMudaram={recarregarCadastros} />;
     if (modulo.id === "logs") return <Logs />;
     if (modulo.id === "financeiro") {
-      if (tela?.id === "entradas") return <Entradas cadastros={cadastros} podeRegistrar={perm.pagar} onCadastrosMudaram={recarregarCadastros} />;
+      if (tela?.id === "entradas") return <Entradas cadastros={cadastros} podeRegistrar={perm.registrarEntrada} podeEstornar={perm.pagar} onCadastrosMudaram={recarregarCadastros} />;
       if (tela?.id === "caixa") {
         const aba = ABAS_CAIXA.some((a) => a.id === rota.aba) ? rota.aba : "extrato";
         return (

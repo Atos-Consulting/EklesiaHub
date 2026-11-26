@@ -8,11 +8,11 @@ export const NIVEIS = {
   },
   supervisor: {
     rotulo: "Supervisor",
-    descricao: "Lança, aprova e cancela notas, registra pagamentos, recebimentos, dízimos, ofertas e movimentos de caixa no Financeiro e gerencia usuários do seu nível para baixo (Supervisor e Usuário). Não acessa parâmetros.",
+    descricao: "Lança, aprova e cancela notas, registra pagamentos, recebimentos, dízimos, ofertas e movimentos de caixa no Financeiro (e estorna) e gerencia usuários do seu nível para baixo (Supervisor e Usuário). Não acessa parâmetros.",
   },
   usuario: {
     rotulo: "Usuário",
-    descricao: "Lança e edita rascunhos e cadastra fornecedores. Consulta o Financeiro, mas não aprova notas nem registra pagamentos, recebimentos, dízimos, ofertas ou movimentos de caixa.",
+    descricao: "Lança e edita rascunhos, cadastra fornecedores e registra dízimos e ofertas. Consulta o restante do Financeiro, mas não aprova notas, não estorna nem registra pagamentos, recebimentos ou movimentos de caixa.",
   },
 };
 
@@ -27,7 +27,8 @@ export function permissoes(perfil) {
   return {
     lancar: temNivel,                                  // criar/editar rascunhos e cadastrar fornecedores
     aprovar: n === "administrador" || n === "supervisor", // aprovar e cancelar notas
-    pagar: n === "administrador" || n === "supervisor",   // Financeiro: baixar, estornar, mudar vencimento e registrar entradas
+    pagar: n === "administrador" || n === "supervisor",   // Financeiro: baixar, estornar (inclusive entradas), mudar vencimento e movimentos de caixa
+    registrarEntrada: temNivel,                        // Dízimos e ofertas: registrar (v16); estornar continua em "pagar"
     administrar: n === "administrador",                // Parâmetros da própria empresa
     gerirUsuarios: n === "administrador" || n === "supervisor", // Usuários: cada um gere o seu nível e os abaixo
     niveisQueGere: NIVEIS_ABAIXO[n] ?? [],             // níveis que este usuário pode criar/editar

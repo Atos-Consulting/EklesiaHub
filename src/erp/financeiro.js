@@ -11,6 +11,8 @@ export const FORMAS_PAGAMENTO = {
 
 // Entradas (v12): dízimos, ofertas, campanhas e outras. Boleto não entra (é forma de pagar, não de receber).
 export const TIPOS_ENTRADA = { dizimo: "Dízimo", oferta: "Oferta", campanha: "Campanha", outra: "Outra entrada" };
+// Tipos aceitos em entradas novas (v16): "outra" ficou só para as antigas; o resto vai como entrada avulsa em Caixa.
+export const TIPOS_ENTRADA_NOVA = { dizimo: "Dízimo", oferta: "Oferta", campanha: "Campanha" };
 export const FORMAS_RECEBIMENTO = Object.fromEntries(Object.entries(FORMAS_PAGAMENTO).filter(([k]) => k !== "boleto"));
 
 // Movimentos de caixa (v13) e as origens das linhas do extrato (view extrato_caixa).
