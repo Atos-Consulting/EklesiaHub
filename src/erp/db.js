@@ -19,6 +19,7 @@ export function mensagemErro(e) {
   if (msg.includes("pagamentos_ativo_uq")) return "Este título já foi pago.";
   if (msg.includes("formas_pagamento_empresa_nome_uq")) return "Já existe uma forma de pagamento com este nome.";
   if (/(condicoes_pagamento|titulos_financeiros|entradas)_forma_fk/.test(msg)) return "Esta forma de pagamento já foi usada e não pode ser excluída. Desative-a.";
+  if (msg.includes("conciliacoes_caixa_ativa_uq")) return "Este dia já está conciliado nesta conta.";
   if (msg.includes("campanhas_empresa_nome_uq")) return "Já existe uma campanha com este nome.";
   if (msg.includes("campanhas_periodo_ck")) return "A data de fim da campanha não pode ser antes do início.";
   if (msg.includes("entradas_campanha_fk")) return "Esta campanha já recebeu entradas e não pode ser excluída. Desative-a.";
@@ -406,14 +407,41 @@ export async function estornarEntrada(entradaId, motivo) {
 export async function carregarExtrato(contaId, { de, ate }) {
   const diaAntes = new Date(`${de}T12:00:00Z`);
   diaAntes.setUTCDate(diaAntes.getUTCDate() - 1);
-  const [linhas, anterior] = await Promise.all([
+  const [linhas, anterior, conciliado] = await Promise.all([
     supabase.from("extrato_caixa").select("*").eq("conta_caixa_id", contaId).gte("data", de).lte("data", ate)
       .order("data").order("criado_em").order("ref_id").limit(5000),
     supabase.rpc("saldo_caixa_ate", { p_conta: contaId, p_data: diaAntes.toISOString().slice(0, 10) }),
+    supabase.rpc("conciliado_ate", { p_conta: contaId }),
   ]);
   if (linhas.error) throw linhas.error;
   if (anterior.error) throw anterior.error;
-  return { linhas: linhas.data, saldoAnterior: Number(anterior.data ?? 0) };
+  if (conciliado.error) throw conciliado.error;
+  return { linhas: linhas.data, saldoAnterior: Number(anterior.data ?? 0), conciliadoAte: conciliado.data ?? null };
+}
+
+// ── Conciliação de caixa (v19) ──
+export async function listarConciliacoes(contaId) {
+  const { data, error } = await supabase.from("conciliacoes_caixa").select("*").eq("conta_caixa_id", contaId)
+    .order("data", { ascending: false }).order("id", { ascending: false }).limit(500);
+  if (error) throw error;
+  return data;
+}
+
+export async function saldoCaixaAte(contaId, data) {
+  const { data: saldo, error } = await supabase.rpc("saldo_caixa_ate", { p_conta: contaId, p_data: data });
+  if (error) throw error;
+  return Number(saldo ?? 0);
+}
+
+export async function conciliarCaixa(contaId, data, saldo, observacao) {
+  const { data: id, error } = await supabase.rpc("conciliar_caixa", { p_conta: contaId, p_data: data, p_saldo: saldo, p_observacao: observacao?.trim() || null });
+  if (error) throw error;
+  return id;
+}
+
+export async function desfazerConciliacao(id, motivo) {
+  const { error } = await supabase.rpc("desfazer_conciliacao", { p_conciliacao: id, p_motivo: motivo.trim() });
+  if (error) throw error;
 }
 
 // Fluxo de caixa: realizado (extrato), saldo de cada conta antes do período e os títulos em aberto (previsto).

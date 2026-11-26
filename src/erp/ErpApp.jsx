@@ -9,6 +9,7 @@ import MovimentosCaixa from "./MovimentosCaixa";
 import FluxoCaixa from "./FluxoCaixa";
 import RelatorioMes from "./RelatorioMes";
 import AbasTela from "./AbasTela";
+import Conciliacao from "./Conciliacao";
 import Logs from "./Logs";
 import Fornecedores from "./Fornecedores";
 import ImportarXml from "./ImportarXml";
@@ -56,7 +57,7 @@ function lerRota() {
 // Financeiro (reorganizado de 5 para 3 telas): endereços antigos continuam abrindo a aba certa.
 const ROTAS_ANTIGAS_FINANCEIRO = { pagar: ["lancamentos", "pagar"], receber: ["lancamentos", "receber"], fluxo: ["caixa", "fluxo"], relatorio: ["caixa", "relatorio"] };
 const ABAS_CONTAS = [{ id: "pagar", rotulo: "A pagar" }, { id: "receber", rotulo: "A receber" }];
-const ABAS_CAIXA = [{ id: "extrato", rotulo: "Extrato e movimentos" }, { id: "fluxo", rotulo: "Fluxo de caixa" }, { id: "relatorio", rotulo: "Relatório do mês" }];
+const ABAS_CAIXA = [{ id: "extrato", rotulo: "Extrato de Caixa" }, { id: "conciliacao", rotulo: "Conciliação" }, { id: "fluxo", rotulo: "Fluxo de caixa" }, { id: "relatorio", rotulo: "Relatório do mês" }];
 
 const iniciais = (nome) => {
   const partes = (nome || "?").trim().split(/\s+/);
@@ -206,6 +207,7 @@ export default function ErpApp({ perfil, onSair, onEmpresaTrocada }) {
         return (
           <>
             <AbasTela base="#/financeiro/caixa" abas={ABAS_CAIXA} atual={aba} rotulo="Visões do caixa" />
+            {aba === "conciliacao" && <Conciliacao cadastros={cadastros} podeConciliar={perm.pagar} podeDesfazer={perm.administrar} />}
             {aba === "fluxo" && <FluxoCaixa cadastros={cadastros} />}
             {aba === "relatorio" && <RelatorioMes cadastros={cadastros} perfil={perfil} />}
             {aba === "extrato" && <MovimentosCaixa cadastros={cadastros} podeRegistrar={perm.pagar} onCadastrosMudaram={recarregarCadastros} />}

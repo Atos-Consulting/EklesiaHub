@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Header, Pill } from "../ui";
 import { lbl, inp, msgErro } from "../estilos";
 import Icone from "./Icone";
 import Modal from "./Modal";
 import ThOrdenavel from "./ThOrdenavel";
 import { useOrdenacao } from "./useOrdenacao";
+import { useCarga } from "./useCarga";
 import { carregarExtrato, listarMovimentos, registrarMovimento, estornarMovimento, mensagemErro } from "./db";
 import { formatarMoeda, formatarData, hojeISO, lerNumero, paraCentavos, deCentavos, somarValores } from "./format";
 import { TIPOS_MOVIMENTO, ORIGENS_EXTRATO, somarDias } from "./financeiro";
@@ -46,18 +47,6 @@ function Indicador({ icone, tom = "", rotulo, valor, sub }) {
   );
 }
 
-// Carrega do banco quando a chave muda; enquanto não chega, devolve o resultado anterior (a tela não pisca).
-function useCarga(chave, carregar) {
-  const [r, setR] = useState({ chave: null, dados: null, erro: "" });
-  useEffect(() => {
-    if (!chave) return undefined;
-    let ativo = true;
-    carregar().then((d) => { if (ativo) setR({ chave, dados: d, erro: "" }); })
-      .catch((e) => { if (ativo) setR({ chave, dados: null, erro: mensagemErro(e) }); });
-    return () => { ativo = false; };
-  }, [chave]); // eslint-disable-line react-hooks/exhaustive-deps -- `carregar` muda junto com a chave
-  return { dados: r.dados, erro: r.erro, carregando: r.chave !== chave };
-}
 
 // Financeiro → Movimentos de caixa: extrato por conta (com saldo dia a dia) e transferências/saídas/entradas avulsas.
 export default function MovimentosCaixa({ cadastros, podeRegistrar, onCadastrosMudaram }) {
@@ -107,7 +96,7 @@ export default function MovimentosCaixa({ cadastros, podeRegistrar, onCadastrosM
   return (
     <div>
       <div className="page-header">
-        <Header title="Extrato e movimentos" subtitle="Extrato de cada conta caixa (entradas, pagamentos, transferências e lançamentos avulsos) com o saldo dia a dia. Aqui também se registram transferências entre contas (ex.: depósito do caixa no banco), saídas sem nota (ex.: tarifa bancária) e entradas que não são contribuição (ex.: rendimento)." />
+        <Header title="Extrato de Caixa" subtitle="Extrato de cada conta caixa (entradas, pagamentos, transferências e lançamentos avulsos) com o saldo dia a dia. Aqui também se registram transferências entre contas (ex.: depósito do caixa no banco), saídas sem nota (ex.: tarifa bancária) e entradas que não são contribuição (ex.: rendimento)." />
         {podeRegistrar && <button className="btn btn-primary" onClick={() => setAcao({ tipo: "novo" })}><Icone nome="mais" tamanho={16} traco={2.2} /> Novo movimento</button>}
       </div>
 
@@ -142,6 +131,11 @@ export default function MovimentosCaixa({ cadastros, podeRegistrar, onCadastrosM
             <input type="date" value={filtros.ate} onChange={f("ate")} style={{ ...inp, width: 156 }} />
           </label>
         </div>
+        {visao === "extrato" && extrato.dados?.conciliadoAte && (
+          <div className="muted" style={{ fontSize: 12.5, padding: "0 16px 10px", display: "flex", alignItems: "center", gap: 6 }}>
+            <Icone nome="cadeado" tamanho={14} /> Conta conciliada até <strong>{formatarData(extrato.dados.conciliadoAte)}</strong>: lançamentos até esse dia estão travados (veja a aba Conciliação).
+          </div>
+        )}
         {!periodoOk && <div className="alert alert-warn" style={{ margin: "0 16px 12px" }}><Icone nome="alerta" tamanho={16} /><span>Informe um período válido (a data inicial não pode ser depois da final).</span></div>}
 
         <div className="abas" role="tablist" aria-label="Visão">
@@ -173,7 +167,8 @@ export default function MovimentosCaixa({ cadastros, podeRegistrar, onCadastrosM
                     return (
                       <tr key={l.chave} className="clicavel" tabIndex={0} onClick={abrir} onKeyDown={(e) => { if (e.key === "Enter") abrir(); }}
                         title={ehMovimento(l.origem) ? "Ver o movimento" : `Abrir ${NOME_TELA[l.origem]}`}>
-                        <td>{formatarData(l.data)}</td>
+                        <td style={{ whiteSpace: "nowrap" }}>{formatarData(l.data)}{extrato.dados.conciliadoAte && l.data <= extrato.dados.conciliadoAte && (
+                          <span title="Conciliado" style={{ marginLeft: 6, color: "var(--muted)", verticalAlign: "-2px" }}><Icone nome="cadeado" tamanho={13} /></span>)}</td>
                         <td className="truncate" style={{ maxWidth: 360 }}>{l.descricao}</td>
                         <td><Pill tone={l.valor > 0 ? "ok" : "neutral"}>{ORIGENS_EXTRATO[l.origem] ?? l.origem}</Pill></td>
                         <td className="num" style={{ color: "var(--ok-text)", fontWeight: 550 }}>{l.valor > 0 ? formatarMoeda(l.valor) : ""}</td>
