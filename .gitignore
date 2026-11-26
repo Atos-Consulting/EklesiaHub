@@ -30,3 +30,6 @@ desktop.ini
 
 # Arquivos temporários do Supabase CLI
 supabase/
+
+# Memória das reuniões BMAD (party mode)
+docs/party-mode/
