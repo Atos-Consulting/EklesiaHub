@@ -270,6 +270,8 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
     setTentou(true);
     setErro("");
     if (temErro) setErro("Revise os campos destacados em vermelho.");
+    else if (!form.centroCustoId) setErro("Informe o centro de custo da nota para aprová-la.");
+    else if (!cadastros.centros.find((c) => String(c.id) === form.centroCustoId)?.ativo) setErro("O centro de custo da nota está inativo. Escolha outro para aprová-la.");
     else if (!form.contaCaixaId) setErro("Informe a conta caixa da nota para aprová-la.");
     else if (!form.condicaoId) setErro("Informe a condição de pagamento da nota para aprová-la.");
     else if (centLiquido <= 0) setErro("As retenções não podem ser iguais ou maiores que o total da nota.");
@@ -428,9 +430,9 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
               {mostrar("fornecedorId") && <div style={msgErro}>{erros.fornecedorId}</div>}
             </div>
             <div>
-              <label style={lbl}>Centro de custo</label>
+              <label style={lbl}>Centro de custo{podeAprovar ? " *" : ""}</label>
               <select style={estiloCampo()} value={form.centroCustoId} onChange={campo("centroCustoId")} {...desabilitado}>
-                <option value="">— Nenhum —</option>
+                <option value="">{editavel ? "— Selecione (obrigatório para aprovar) —" : "— Nenhum —"}</option>
                 {cadastros.centros.filter((c) => c.ativo || String(c.id) === form.centroCustoId).map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
               </select>
             </div>
