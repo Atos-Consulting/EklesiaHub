@@ -6,7 +6,7 @@ import ThOrdenavel from "./ThOrdenavel";
 import { useOrdenacao } from "./useOrdenacao";
 import { carregarFluxo, mensagemErro } from "./db";
 import { formatarMoeda, formatarData, hojeISO, paraCentavos, deCentavos } from "./format";
-import { ORIGENS_EXTRATO, somarDias, somarMeses } from "./financeiro";
+import { ORIGENS_EXTRATO, somarDias, somarMeses, vencimentoFixa } from "./financeiro";
 
 // Fluxo de caixa = realizado (extrato_caixa) + previsto (contas a pagar e a receber em aberto), por dia, semana ou mês.
 // Não grava nada: só lê o que as outras telas do Financeiro registram.
@@ -107,6 +107,20 @@ export default function FluxoCaixa({ cadastros }) {
     };
     dados.receber.forEach((t) => previsto(t, 1));
     dados.pagar.forEach((t) => previsto(t, -1));
+    // Contas fixas: meses além do já gerado (os gerados já vieram como títulos acima).
+    for (const f of dados.fixas || []) {
+      if (!todas && f.conta_caixa_id !== conta) continue;
+      let comp = f.gerado_ate ? somarMeses(f.gerado_ate, 1) : f.inicio;
+      while (comp <= filtros.ate && (!f.fim || comp <= f.fim)) {
+        const venc = vencimentoFixa(comp, f.dia_vencimento);
+        if (venc >= filtros.de && venc <= filtros.ate && venc >= hoje) {
+          const sinal = f.natureza === "receber" ? 1 : -1;
+          itens.push({ data: venc, vencimento: venc, previsto: true, atrasado: false, tipo: `${sinal > 0 ? "A receber" : "A pagar"} · fixa`,
+            descricao: `${f.descricao} — ${comp.slice(5, 7)}/${comp.slice(0, 4)}${f.pessoa?.nome ? ` · ${f.pessoa.nome}` : ""}`, centavos: sinal * paraCentavos(f.valor) });
+        }
+        comp = somarMeses(comp, 1);
+      }
+    }
     itens.sort((a, b) => a.data.localeCompare(b.data) || Number(a.previsto) - Number(b.previsto));
 
     const mapa = new Map();

@@ -174,7 +174,7 @@ export function NovaContaReceber({ cadastros, onFechar, onConcluido, onCadastros
 }
 
 // Cancela uma parcela a receber em aberto (ex.: o evento não aconteceu). Parcela recebida precisa de estorno antes.
-export function CancelarContaReceber({ titulo: t, onFechar, onConcluido }) {
+export function CancelarContaReceber({ titulo: t, natureza = "receber", onFechar, onConcluido }) {
   const [motivo, setMotivo] = useState("");
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
@@ -187,7 +187,7 @@ export function CancelarContaReceber({ titulo: t, onFechar, onConcluido }) {
     catch (e) { setErro(mensagemErro(e)); setSalvando(false); }
   }
   return (
-    <Modal titulo="Cancelar parcela a receber" largura={480} nivel={400} fecharFora={false} onFechar={onFechar}
+    <Modal titulo={natureza === "pagar" ? "Cancelar parcela a pagar" : "Cancelar parcela a receber"} largura={480} nivel={400} fecharFora={false} onFechar={onFechar}
       rodape={<>
         <button className="btn btn-ghost" onClick={onFechar} disabled={salvando}>Voltar</button>
         <button className="btn btn-danger" style={{ opacity: valido ? 1 : 0.5 }} disabled={!valido || salvando} onClick={confirmar}>{salvando ? "Cancelando..." : "Cancelar parcela"}</button>

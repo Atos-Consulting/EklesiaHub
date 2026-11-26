@@ -5,7 +5,7 @@ import Icone from "./Icone";
 import Modal from "./Modal";
 import ThOrdenavel from "./ThOrdenavel";
 import { useOrdenacao } from "./useOrdenacao";
-import { listarTitulosPagar, listarTitulosReceber, listarPagamentosDoTitulo, pagarTitulo, receberTitulo, estornarPagamento, atualizarTitulo, mensagemErro } from "./db";
+import { listarTitulosPagar, gerarContasFixas, listarTitulosReceber, listarPagamentosDoTitulo, pagarTitulo, receberTitulo, estornarPagamento, atualizarTitulo, mensagemErro } from "./db";
 import { NovaContaReceber, CancelarContaReceber } from "./NovaContaReceber";
 import { formatarMoeda, formatarData, hojeISO, lerNumero, paraCentavos, deCentavos, somarValores, mascararDocumento } from "./format";
 import { ORIGEM_PAGAMENTO, nomeForma, formaPorId, situacaoTitulo, somarDias } from "./financeiro";
@@ -68,7 +68,9 @@ export default function ContasPagar({ natureza = "pagar", cadastros, podePagar, 
   const emSete = somarDias(hoje, 7);
 
   const recarregar = useCallback(
-    () => (receber ? listarTitulosReceber() : listarTitulosPagar()).then((d) => { setTitulos(d); setErro(""); }).catch((e) => setErro(mensagemErro(e))),
+    // Antes de listar, gera os meses das contas fixas que ainda faltam (v20; idempotente, falha não impede a lista).
+    () => gerarContasFixas().catch(() => 0)
+      .then(() => (receber ? listarTitulosReceber() : listarTitulosPagar())).then((d) => { setTitulos(d); setErro(""); }).catch((e) => setErro(mensagemErro(e))),
     [receber],
   );
   useEffect(() => { recarregar(); }, [recarregar]);
@@ -177,7 +179,7 @@ export default function ContasPagar({ natureza = "pagar", cadastros, podePagar, 
                     onClick={() => setAcao({ tipo: "ver", titulo: t })} onKeyDown={(e) => { if (e.key === "Enter" && e.target === e.currentTarget) setAcao({ tipo: "ver", titulo: t }); }}>
                     <td style={sit.id === "vencido" ? { color: "var(--danger)", fontWeight: 600 } : undefined}>{formatarData(t.vencimento)}</td>
                     <td className="truncate" style={{ fontWeight: 550, maxWidth: 260 }}>{t.fornecedor_nome}</td>
-                    <td>{t.descricao}{t.forma_pagamento && <div className="muted" style={{ fontSize: 12 }}>{t.forma_pagamento_nome ?? nomeForma(cadastros.formas, t.forma_pagamento_id, t.forma_pagamento)}{temDadosPagamento(t) && " · dados informados"}</div>}</td>
+                    <td>{t.descricao}{t.conta_fixa_id && <span className="pill" style={{ marginLeft: 6, fontSize: 11 }} title="Gerado por uma conta fixa mensal">fixa</span>}{t.forma_pagamento && <div className="muted" style={{ fontSize: 12 }}>{t.forma_pagamento_nome ?? nomeForma(cadastros.formas, t.forma_pagamento_id, t.forma_pagamento)}{temDadosPagamento(t) && " · dados informados"}</div>}</td>
                     <td>{t.parcela}/{t.total_parcelas}</td>
                     <td className="num" style={t.status === "cancelado" ? { textDecoration: "line-through" } : { fontWeight: 550 }}>{formatarMoeda(t.valor)}</td>
                     <td><Pill tone={sit.tom}>{sit.rotulo}</Pill></td>
@@ -208,7 +210,7 @@ export default function ContasPagar({ natureza = "pagar", cadastros, podePagar, 
 
       {acao?.tipo === "pagar" && <PagarModal natureza={natureza} titulo={acao.titulo} caixas={cadastros.caixas} pessoas={cadastros.pessoas} onFechar={() => setAcao(null)} onConcluido={aoConcluir} />}
       {acao?.tipo === "nova" && <NovaContaReceber cadastros={cadastros} onFechar={() => setAcao(null)} onConcluido={aoConcluir} onCadastrosMudaram={onCadastrosMudaram} />}
-      {acao?.tipo === "cancelar" && <CancelarContaReceber titulo={acao.titulo} onFechar={() => setAcao(null)} onConcluido={aoConcluir} />}
+      {acao?.tipo === "cancelar" && <CancelarContaReceber titulo={acao.titulo} natureza={natureza} onFechar={() => setAcao(null)} onConcluido={aoConcluir} />}
       {acao?.tipo === "estornar" && (
         <EstornoModal natureza={natureza} descricao={`${acao.titulo.descricao} — parcela ${acao.titulo.parcela}/${acao.titulo.total_parcelas} · ${formatarMoeda(acao.titulo.valor_pago)}`}
           pagamentoId={acao.titulo.pagamento_id} onFechar={() => setAcao(null)} onConcluido={aoConcluir} />
@@ -412,7 +414,7 @@ function LancamentoModal({ natureza, titulo: t, caixas, formas, podePagar, onFec
     <Modal titulo={`${t.descricao} · parcela ${t.parcela}/${t.total_parcelas}`} extra={<Pill tone={sit.tom}>{sit.rotulo}</Pill>} largura={720} fecharFora={false} onFechar={onFechar}
       rodape={<>
         {podePagar && t.status === "pago" && t.pagamento_id && <button className="btn btn-ghost" style={{ marginRight: "auto", color: "var(--danger)", borderColor: "var(--danger-border)" }} onClick={onEstornar}>Estornar {T.baixa.toLowerCase()}</button>}
-        {podePagar && receber && t.status === "aberto" && <button className="btn btn-ghost" style={{ marginRight: "auto", color: "var(--danger)", borderColor: "var(--danger-border)" }} onClick={onCancelar}>Cancelar parcela</button>}
+        {podePagar && (receber || !t.documento_id) && t.status === "aberto" && <button className="btn btn-ghost" style={{ marginRight: "auto", color: "var(--danger)", borderColor: "var(--danger-border)" }} onClick={onCancelar}>Cancelar parcela</button>}
         {ok && <span className="pill pill-ok">Salvo</span>}
         <button className="btn btn-ghost" onClick={onFechar} disabled={salvando}>Fechar</button>
         {editavel && <button className="btn btn-ghost" style={{ borderColor: "var(--primary)", color: "var(--primary-hover)" }} onClick={salvar} disabled={salvando}>{salvando ? "Salvando..." : "Salvar"}</button>}

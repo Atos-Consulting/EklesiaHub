@@ -19,6 +19,14 @@ export const COMPORTAMENTOS_FORMA = FORMAS_PAGAMENTO;
 export const formaPorId = (formas, id) => (formas || []).find((f) => String(f.id) === String(id ?? ""));
 // Nome para exibir: o da forma cadastrada; sem ela (dado antigo), o rótulo do comportamento.
 export const nomeForma = (formas, id, codigo) => formaPorId(formas, id)?.nome ?? FORMAS_PAGAMENTO[codigo] ?? codigo ?? "";
+// Contas fixas (v20): vencimento de uma competência (AAAA-MM-01) no dia escolhido, limitado ao último dia do mês.
+// Repete a conta de gerar_contas_fixas no banco: mudou uma, mude a outra.
+export function vencimentoFixa(competencia, dia) {
+  const [a, m] = competencia.split("-").map(Number);
+  const ultimo = new Date(Date.UTC(a, m, 0)).getUTCDate();
+  return `${competencia.slice(0, 8)}${String(Math.min(dia, ultimo)).padStart(2, "0")}`;
+}
+
 export const FORMAS_RECEBIMENTO = Object.fromEntries(Object.entries(FORMAS_PAGAMENTO).filter(([k]) => k !== "boleto"));
 
 // Movimentos de caixa (v13) e as origens das linhas do extrato (view extrato_caixa).

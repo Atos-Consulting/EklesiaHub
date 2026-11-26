@@ -20,6 +20,9 @@ export function mensagemErro(e) {
   if (msg.includes("formas_pagamento_empresa_nome_uq")) return "Já existe uma forma de pagamento com este nome.";
   if (/(condicoes_pagamento|titulos_financeiros|entradas)_forma_fk/.test(msg)) return "Esta forma de pagamento já foi usada e não pode ser excluída. Desative-a.";
   if (msg.includes("conciliacoes_caixa_ativa_uq")) return "Este dia já está conciliado nesta conta.";
+  if (msg.includes("contas_fixas_centro_ck")) return "Conta fixa a pagar precisa de centro de custo.";
+  if (msg.includes("contas_fixas_periodo_ck")) return "O mês final não pode ser antes do mês inicial.";
+  if (msg.includes("titulos_financeiros_conta_fixa_fk")) return "Esta conta fixa já gerou lançamentos e não pode ser excluída. Desative-a.";
   if (msg.includes("campanhas_empresa_nome_uq")) return "Já existe uma campanha com este nome.";
   if (msg.includes("campanhas_periodo_ck")) return "A data de fim da campanha não pode ser antes do início.";
   if (msg.includes("entradas_campanha_fk")) return "Esta campanha já recebeu entradas e não pode ser excluída. Desative-a.";
@@ -419,6 +422,28 @@ export async function carregarExtrato(contaId, { de, ate }) {
   return { linhas: linhas.data, saldoAnterior: Number(anterior.data ?? 0), conciliadoAte: conciliado.data ?? null };
 }
 
+// ── Contas fixas mensais (v20) ──
+export async function listarContasFixas() {
+  const { data, error } = await supabase.from("contas_fixas").select("*, pessoa:pessoas!contas_fixas_pessoa_fk(nome)").order("descricao").limit(2000);
+  if (error) throw error;
+  return data;
+}
+
+// dados: { natureza, descricao, pessoaId, valor, dia, inicio (AAAA-MM), fim (AAAA-MM ou ""), formaId, caixaId, centroId, observacao, ativo }
+export const salvarContaFixa = (id, d) => gravar("contas_fixas", id, {
+  natureza: d.natureza, descricao: d.descricao.trim(), pessoa_id: Number(d.pessoaId), valor: d.valor, dia_vencimento: d.dia,
+  inicio: `${d.inicio}-01`, fim: d.fim ? `${d.fim}-01` : null,
+  forma_pagamento_id: d.formaId ? Number(d.formaId) : null, conta_caixa_id: d.caixaId ? Number(d.caixaId) : null,
+  centro_custo_id: d.centroId ? Number(d.centroId) : null, observacao: d.observacao.trim() || null, ativo: d.ativo,
+});
+
+// Gera os lançamentos das contas fixas até o mês que vem (idempotente). Devolve quantos criou.
+export async function gerarContasFixas() {
+  const { data, error } = await supabase.rpc("gerar_contas_fixas");
+  if (error) throw error;
+  return data ?? 0;
+}
+
 // ── Conciliação de caixa (v19) ──
 export async function listarConciliacoes(contaId) {
   const { data, error } = await supabase.from("conciliacoes_caixa").select("*").eq("conta_caixa_id", contaId)
@@ -452,16 +477,18 @@ export async function carregarFluxo(contaIds, { de, ate }) {
   const antes = diaAntes.toISOString().slice(0, 10);
   let extrato = supabase.from("extrato_caixa").select("*").gte("data", de).lte("data", ate);
   if (contaIds.length === 1) extrato = extrato.eq("conta_caixa_id", contaIds[0]);
-  const [linhas, pagar, receber, ...saldos] = await Promise.all([
+  const [linhas, pagar, receber, fixas, ...saldos] = await Promise.all([
     extrato.order("data").order("criado_em").limit(10000),
     supabase.from("titulos_pagar").select("*").eq("status", "aberto").lte("vencimento", ate).order("vencimento").limit(5000),
     supabase.from("titulos_receber").select("*").eq("status", "aberto").lte("vencimento", ate).order("vencimento").limit(5000),
+    // contas fixas: os meses ainda não gerados entram como previsão (v20)
+    supabase.from("contas_fixas").select("id,natureza,descricao,valor,dia_vencimento,inicio,fim,gerado_ate,conta_caixa_id,pessoa:pessoas!contas_fixas_pessoa_fk(nome)").eq("ativo", true).limit(2000),
     ...contaIds.map((id) => supabase.rpc("saldo_caixa_ate", { p_conta: id, p_data: antes })),
   ]);
-  const erro = [linhas, pagar, receber, ...saldos].find((r) => r.error)?.error;
+  const erro = [linhas, pagar, receber, fixas, ...saldos].find((r) => r.error)?.error;
   if (erro) throw erro;
   return {
-    linhas: linhas.data, pagar: pagar.data, receber: receber.data,
+    linhas: linhas.data, pagar: pagar.data, receber: receber.data, fixas: fixas.data,
     saldoInicial: saldos.reduce((acc, r) => acc + Math.round(Number(r.data ?? 0) * 100), 0) / 100,
   };
 }

@@ -10,6 +10,7 @@ import FluxoCaixa from "./FluxoCaixa";
 import RelatorioMes from "./RelatorioMes";
 import AbasTela from "./AbasTela";
 import Conciliacao from "./Conciliacao";
+import ContasFixas from "./ContasFixas";
 import Logs from "./Logs";
 import Fornecedores from "./Fornecedores";
 import ImportarXml from "./ImportarXml";
@@ -56,7 +57,7 @@ function lerRota() {
 
 // Financeiro (reorganizado de 5 para 3 telas): endereços antigos continuam abrindo a aba certa.
 const ROTAS_ANTIGAS_FINANCEIRO = { pagar: ["lancamentos", "pagar"], receber: ["lancamentos", "receber"], fluxo: ["caixa", "fluxo"], relatorio: ["caixa", "relatorio"] };
-const ABAS_CONTAS = [{ id: "pagar", rotulo: "A pagar" }, { id: "receber", rotulo: "A receber" }];
+const ABAS_CONTAS = [{ id: "pagar", rotulo: "A pagar" }, { id: "receber", rotulo: "A receber" }, { id: "fixas", rotulo: "Contas fixas" }];
 const ABAS_CAIXA = [{ id: "extrato", rotulo: "Extrato de Caixa" }, { id: "conciliacao", rotulo: "Conciliação" }, { id: "fluxo", rotulo: "Fluxo de caixa" }, { id: "relatorio", rotulo: "Relatório do mês" }];
 
 const iniciais = (nome) => {
@@ -214,11 +215,13 @@ export default function ErpApp({ perfil, onSair, onEmpresaTrocada }) {
           </>
         );
       }
-      const natureza = rota.aba === "receber" ? "receber" : "pagar";
+      const abaLanc = ABAS_CONTAS.some((a) => a.id === rota.aba) ? rota.aba : "pagar";
       return (
         <>
-          <AbasTela base="#/financeiro/lancamentos" abas={ABAS_CONTAS} atual={natureza} rotulo="Contas a pagar ou a receber" />
-          <ContasPagar key={natureza} natureza={natureza} cadastros={cadastros} podePagar={perm.pagar} onCadastrosMudaram={recarregarCadastros} />
+          <AbasTela base="#/financeiro/lancamentos" abas={ABAS_CONTAS} atual={abaLanc} rotulo="Lançamentos" />
+          {abaLanc === "fixas"
+            ? <ContasFixas cadastros={cadastros} podeEditar={perm.pagar} onCadastrosMudaram={recarregarCadastros} />
+            : <ContasPagar key={abaLanc} natureza={abaLanc} cadastros={cadastros} podePagar={perm.pagar} onCadastrosMudaram={recarregarCadastros} />}
         </>
       );
     }
