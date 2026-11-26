@@ -17,6 +17,8 @@ export function mensagemErro(e) {
   if (msg.includes("condicoes_pagamento_empresa_nome_uq")) return "Já existe uma condição de pagamento com este nome.";
   if (msg.includes("condicoes_pagamento_a_vista_ck")) return "Condição à vista tem uma parcela só, paga no ato.";
   if (msg.includes("pagamentos_ativo_uq")) return "Este título já foi pago.";
+  if (msg.includes("formas_pagamento_empresa_nome_uq")) return "Já existe uma forma de pagamento com este nome.";
+  if (/(condicoes_pagamento|titulos_financeiros|entradas)_forma_fk/.test(msg)) return "Esta forma de pagamento já foi usada e não pode ser excluída. Desative-a.";
   if (msg.includes("campanhas_empresa_nome_uq")) return "Já existe uma campanha com este nome.";
   if (msg.includes("campanhas_periodo_ck")) return "A data de fim da campanha não pode ser antes do início.";
   if (msg.includes("entradas_campanha_fk")) return "Esta campanha já recebeu entradas e não pode ser excluída. Desative-a.";
@@ -37,7 +39,7 @@ export function mensagemErro(e) {
 // ── Cadastros-base ───────────────────────────────────────────────
 
 export async function fetchCadastros() {
-  const [contas, centros, fundos, pessoas, parametros, tipos, caixas, condicoes, campanhas] = await Promise.all([
+  const [contas, centros, fundos, pessoas, parametros, tipos, caixas, condicoes, campanhas, formas] = await Promise.all([
     supabase.from("plano_contas").select("id,codigo,nome,natureza,analitica,pai_id,ativo").order("codigo"),
     supabase.from("centros_custo").select("id,nome,ativo").order("nome"),
     supabase.from("fundos").select("id,nome,restrito,ativo").order("nome"),
@@ -47,12 +49,13 @@ export async function fetchCadastros() {
     supabase.from("contas_caixa_saldo").select("*").order("nome"),
     supabase.from("condicoes_pagamento").select("*").order("nome"),
     supabase.from("campanhas_saldo").select("*").order("nome"),
+    supabase.from("formas_pagamento").select("*").order("nome"),
   ]);
-  const erro = [contas, centros, fundos, pessoas, parametros, tipos, caixas, condicoes, campanhas].find((r) => r.error)?.error;
+  const erro = [contas, centros, fundos, pessoas, parametros, tipos, caixas, condicoes, campanhas, formas].find((r) => r.error)?.error;
   if (erro) throw erro;
   return {
     contas: contas.data, centros: centros.data, fundos: fundos.data, pessoas: pessoas.data,
-    tipos: tipos.data, caixas: caixas.data, condicoes: condicoes.data, campanhas: campanhas.data,
+    tipos: tipos.data, caixas: caixas.data, condicoes: condicoes.data, campanhas: campanhas.data, formas: formas.data,
     // { chave: valor } — ex.: { "nota.numero_tamanho.nfe": "9" }
     parametros: Object.fromEntries(parametros.data.map((p) => [p.chave, p.valor])),
   };
@@ -214,9 +217,12 @@ export const salvarContaCaixa = (id, { nome, banco, agencia, numeroConta, saldoI
     saldo_inicial: saldoInicial, data_saldo_inicial: dataSaldoInicial, conta_contabil_id: contaContabilId ? Number(contaContabilId) : null, ativo,
   });
 
+export const salvarFormaPagamento = (id, { nome, tipo, ativo }) => gravar("formas_pagamento", id, { nome: nome.trim(), tipo, ativo });
+
+// formaPagamento = id da forma (v18); o banco grava o comportamento em forma_pagamento.
 export const salvarCondicaoPagamento = (id, { nome, tipo, formaPagamento, parcelas, diasPrimeira, intervaloDias, ativo }) =>
   gravar("condicoes_pagamento", id, {
-    nome: nome.trim(), tipo, forma_pagamento: formaPagamento || null,
+    nome: nome.trim(), tipo, forma_pagamento: null, forma_pagamento_id: formaPagamento ? Number(formaPagamento) : null,
     parcelas: tipo === "a_vista" ? 1 : parcelas, dias_primeira: tipo === "a_vista" ? 0 : diasPrimeira, intervalo_dias: intervaloDias, ativo,
   });
 

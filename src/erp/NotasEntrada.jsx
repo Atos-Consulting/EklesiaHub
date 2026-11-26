@@ -231,7 +231,7 @@ export default function NotasEntrada({ cadastros, podeEditar, podeAprovar, podeA
             <p style={{ fontSize: 13.5, color: "var(--text-2)", margin: "4px 0 12px" }}>
               <strong>{selecionadas.length}</strong> nota(s), somando <strong>{formatarMoeda(valorSelecionado)}</strong>. Depois de aprovadas,
               as notas <strong>não poderão mais ser editadas</strong> (só canceladas, com motivo). Cada nota gera as parcelas da sua condição de pagamento
-              em Financeiro → Contas a pagar (à vista já sai da conta caixa). Notas sem conta caixa, condição de pagamento ou (com a contabilidade ligada) tipo contábil serão recusadas e continuarão como rascunho.
+              em Financeiro → Lançamentos (a pagar) (à vista já sai da conta caixa). Notas sem conta caixa, condição de pagamento ou (com a contabilidade ligada) tipo contábil serão recusadas e continuarão como rascunho.
             </p>
           )}
           {lote.fase === "andamento" && <p style={{ fontSize: 13.5, margin: "4px 0 12px" }}>Aprovando {lote.feitas + lote.falhas.length} de {lote.total}...</p>}

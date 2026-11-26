@@ -5,13 +5,14 @@ import ThOrdenavel from "../ThOrdenavel";
 import { useOrdenacao } from "../useOrdenacao";
 import { salvarCondicaoPagamento, mensagemErro } from "../db";
 import { formatarMoeda, formatarData, hojeISO } from "../format";
-import { TIPOS_CONDICAO, FORMAS_PAGAMENTO, resumoCondicao, gerarParcelas } from "../financeiro";
+import { TIPOS_CONDICAO, nomeForma, resumoCondicao, gerarParcelas } from "../financeiro";
+import FormaSelect from "../FormaSelect";
 import { CabecalhoAba, FormModal, CampoAtivo, Situacao, BotaoEditar } from "./comum";
 
 const COLUNAS = {
   nome: (c) => c.nome,
   tipo: (c) => TIPOS_CONDICAO[c.tipo],
-  forma: (c) => FORMAS_PAGAMENTO[c.forma_pagamento],
+  forma: (c) => c.forma_nome,
   parcelas: (c) => c.parcelas,
   prazo: (c) => c.dias_primeira,
   intervalo: (c) => (c.parcelas > 1 ? c.intervalo_dias : null),
@@ -23,14 +24,15 @@ export default function CondicoesPagamento({ cadastros, onCadastrosMudaram }) {
   const [busca, setBusca] = useState("");
   const filtradas = useMemo(() => {
     const t = busca.trim().toLowerCase();
-    return cadastros.condicoes.filter((c) => !t || c.nome.toLowerCase().includes(t));
-  }, [cadastros.condicoes, busca]);
+    return cadastros.condicoes.filter((c) => !t || c.nome.toLowerCase().includes(t))
+      .map((c) => ({ ...c, forma_nome: nomeForma(cadastros.formas, c.forma_pagamento_id, c.forma_pagamento) }));
+  }, [cadastros.condicoes, cadastros.formas, busca]);
   const ordenacao = useOrdenacao(filtradas, COLUNAS, { chave: "nome", dir: "asc" });
 
   return (
     <>
       <CabecalhoAba titulo="Condições de pagamento" acaoRotulo="Nova condição" onAcao={() => setEditando("novo")}
-        descricao="Como as notas de entrada são pagas: à vista (sai da conta caixa na aprovação) ou parcelado (gera as parcelas em Financeiro → Contas a pagar, com vencimentos contados a partir da emissão da nota)." />
+        descricao="Como as notas de entrada são pagas: à vista (sai da conta caixa na aprovação) ou parcelado (gera as parcelas em Financeiro → Lançamentos (a pagar), com vencimentos contados a partir da emissão da nota)." />
       <div className="toolbar">
         <label style={{ flex: "1 1 240px", maxWidth: 340 }}>Buscar
           <input placeholder="Nome da condição" value={busca} onChange={(e) => setBusca(e.target.value)} style={inp} />
@@ -54,7 +56,7 @@ export default function CondicoesPagamento({ cadastros, onCadastrosMudaram }) {
               <tr key={c.id} style={!c.ativo ? { color: "var(--faint)" } : undefined}>
                 <td style={{ fontWeight: 550 }}>{c.nome}<div className="muted" style={{ fontSize: 12, fontWeight: 400 }}>{resumoCondicao(c)}</div></td>
                 <td><Pill tone={c.tipo === "a_vista" ? "ok" : "neutral"}>{TIPOS_CONDICAO[c.tipo]}</Pill></td>
-                <td>{FORMAS_PAGAMENTO[c.forma_pagamento] ?? "—"}</td>
+                <td>{c.forma_nome || "—"}</td>
                 <td className="num">{c.parcelas}</td>
                 <td className="num">{c.tipo === "a_vista" ? "no ato" : `${c.dias_primeira} dia(s)`}</td>
                 <td className="num">{c.parcelas > 1 ? `${c.intervalo_dias} dia(s)` : "—"}</td>
@@ -66,16 +68,17 @@ export default function CondicoesPagamento({ cadastros, onCadastrosMudaram }) {
         </table>
       </div>
       {filtradas.length > 0 && <div className="table-footer"><span>{filtradas.length} condição(ões)</span></div>}
-      {editando && <CondicaoForm condicao={editando === "novo" ? null : editando} onFechar={() => setEditando(null)}
+      {editando && <CondicaoForm condicao={editando === "novo" ? null : editando} formas={cadastros.formas} onFechar={() => setEditando(null)}
         onSalvo={async () => { setEditando(null); await onCadastrosMudaram(); }} />}
     </>
   );
 }
 
 // Também usado direto da nota de entrada (botão "Nova"), para não sair da tela.
-export function CondicaoForm({ condicao, onFechar, onSalvo }) {
+export function CondicaoForm({ condicao, formas, onFechar, onSalvo }) {
+  const formaDoTipo = (tipo) => (formas || []).find((x) => x.ativo && x.tipo === tipo);
   const [f, setF] = useState({
-    nome: condicao?.nome ?? "", tipo: condicao?.tipo ?? "parcelado", formaPagamento: condicao?.forma_pagamento ?? "boleto",
+    nome: condicao?.nome ?? "", tipo: condicao?.tipo ?? "parcelado", formaPagamento: condicao ? String(condicao.forma_pagamento_id ?? "") : String(formaDoTipo("boleto")?.id ?? ""),
     parcelas: String(condicao?.parcelas ?? 1), diasPrimeira: String(condicao?.dias_primeira ?? 30),
     intervaloDias: String(condicao?.intervalo_dias ?? 30), ativo: condicao?.ativo ?? true,
   });
@@ -101,7 +104,8 @@ export function CondicaoForm({ condicao, onFechar, onSalvo }) {
 
   // À vista raramente é boleto: troca a forma sugerida para dinheiro.
   function mudarTipo(tipo) {
-    setF((p) => ({ ...p, tipo, ...(tipo === "a_vista" ? { formaPagamento: p.formaPagamento === "boleto" ? "dinheiro" : p.formaPagamento } : {}) }));
+    const ehBoleto = (formas || []).find((x) => String(x.id) === String(f.formaPagamento))?.tipo === "boleto";
+    setF((p) => ({ ...p, tipo, ...(tipo === "a_vista" && ehBoleto ? { formaPagamento: String(formaDoTipo("dinheiro")?.id ?? "") } : {}) }));
   }
 
   async function salvar() {
@@ -134,10 +138,7 @@ export function CondicaoForm({ condicao, onFechar, onSalvo }) {
         </div>
         <div>
           <label style={lbl} htmlFor="cp-forma">Forma de pagamento</label>
-          <select id="cp-forma" style={inp} value={f.formaPagamento} onChange={set("formaPagamento")}>
-            <option value="">— Não informada —</option>
-            {Object.entries(FORMAS_PAGAMENTO).map(([v, r]) => <option key={v} value={v}>{r}</option>)}
-          </select>
+          <FormaSelect id="cp-forma" style={inp} formas={formas} value={f.formaPagamento} onChange={(v) => setF((p) => ({ ...p, formaPagamento: v }))} vazio="— Não informada —" />
         </div>
       </div>
 

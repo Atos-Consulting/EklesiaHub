@@ -12,7 +12,7 @@ import { TIPOS_MOVIMENTO, ORIGENS_EXTRATO, somarDias } from "./financeiro";
 const inicioDoMes = () => `${hojeISO().slice(0, 8)}01`;
 const VISOES = [{ id: "extrato", rotulo: "Extrato da conta" }, { id: "movimentos", rotulo: "Movimentos registrados" }];
 // Tela de onde veio cada linha do extrato que não é movimento de caixa.
-const TELA_ORIGEM = { entrada: "#/financeiro/entradas", pagamento: "#/financeiro/contas/pagar", recebimento: "#/financeiro/contas/receber" };
+const TELA_ORIGEM = { entrada: "#/financeiro/entradas", pagamento: "#/financeiro/lancamentos/pagar", recebimento: "#/financeiro/lancamentos/receber" };
 const NOME_TELA = { entrada: "Dízimos e ofertas", pagamento: "Contas a pagar", recebimento: "Contas a receber" };
 const ehMovimento = (origem) => !TELA_ORIGEM[origem];
 

@@ -8,7 +8,8 @@ import ThOrdenavel from "./ThOrdenavel";
 import { useOrdenacao } from "./useOrdenacao";
 import { listarEntradas, registrarEntrada, estornarEntrada, mensagemErro } from "./db";
 import { formatarMoeda, formatarData, hojeISO, lerNumero, somarValores, mascararDocumento } from "./format";
-import { TIPOS_ENTRADA, TIPOS_ENTRADA_NOVA, FORMAS_RECEBIMENTO } from "./financeiro";
+import { TIPOS_ENTRADA, TIPOS_ENTRADA_NOVA, nomeForma } from "./financeiro";
+import FormaSelect from "./FormaSelect";
 
 const SITUACOES = [{ id: "validas", rotulo: "Válidas" }, { id: "estornadas", rotulo: "Estornadas" }, { id: "todas", rotulo: "Todas" }];
 const naSituacao = (e, s) => s === "todas" || (s === "validas" ? !e.estornado : e.estornado);
@@ -19,7 +20,7 @@ const COLUNAS = {
   tipo: (e) => TIPOS_ENTRADA[e.tipo],
   quem: (e) => e.pessoa_nome || e.descricao || "",
   caixa: (e) => e.conta_caixa_nome,
-  forma: (e) => FORMAS_RECEBIMENTO[e.forma_pagamento],
+  forma: (e) => e.forma_pagamento_nome ?? nomeForma(null, null, e.forma_pagamento),
   valor: (e) => Number(e.valor),
 };
 
@@ -164,7 +165,7 @@ export default function Entradas({ cadastros, podeRegistrar, podeEstornar, onCad
                     {(e.pessoa_nome || e.campanha_nome) && detalheLinha(e) && <div className="muted" style={{ fontSize: 12 }}>{detalheLinha(e)}</div>}
                   </td>
                   <td>{e.conta_caixa_nome}</td>
-                  <td>{FORMAS_RECEBIMENTO[e.forma_pagamento] ?? e.forma_pagamento}</td>
+                  <td>{e.forma_pagamento_nome ?? nomeForma(null, null, e.forma_pagamento)}</td>
                   <td className="num" style={e.estornado ? { textDecoration: "line-through" } : { fontWeight: 550 }}>{formatarMoeda(e.valor)}</td>
                   {podeEstornar && (
                     <td className="acoes" onClick={(ev) => ev.stopPropagation()}>
@@ -202,7 +203,7 @@ function EntradaModal({ cadastros, onFechar, onRegistrada, onCadastrosMudaram })
   const campanhasAtivas = (cadastros.campanhas || []).filter((c) => c.ativo);
   const vazio = (p = {}) => ({
     tipo: p.tipo ?? "dizimo", data: p.data ?? hojeISO(), valor: "", contaCaixaId: p.contaCaixaId ?? (caixasAtivas.length === 1 ? String(caixasAtivas[0].id) : ""),
-    forma: p.forma ?? "dinheiro", pessoaId: "", campanhaId: p.campanhaId ?? (campanhasAtivas.length === 1 ? String(campanhasAtivas[0].id) : ""), centroCustoId: p.centroCustoId ?? "", descricao: "",
+    forma: p.forma ?? String((cadastros.formas || []).find((x) => x.ativo && x.tipo === "dinheiro")?.id ?? ""), pessoaId: "", campanhaId: p.campanhaId ?? (campanhasAtivas.length === 1 ? String(campanhasAtivas[0].id) : ""), centroCustoId: p.centroCustoId ?? "", descricao: "",
   });
   const [f, setF] = useState(() => vazio());
   const [tentou, setTentou] = useState(false);
@@ -230,6 +231,7 @@ function EntradaModal({ cadastros, onFechar, onRegistrada, onCadastrosMudaram })
   else if (caixa && f.data < caixa.data_saldo_inicial) erros.data = `Antes do saldo inicial da conta (${formatarData(caixa.data_saldo_inicial)})`;
   if (!f.contaCaixaId) erros.contaCaixaId = "Escolha a conta que recebeu";
   if (f.tipo === "campanha" && !f.campanhaId) erros.campanhaId = "Escolha a campanha";
+  if (!f.forma) erros.forma = "Escolha a forma de recebimento";
   const borda = (k) => (tentou && erros[k] ? { borderColor: "var(--danger)" } : {});
   const msg = (k) => tentou && erros[k] && <div style={msgErro}>{erros[k]}</div>;
 
@@ -240,7 +242,7 @@ function EntradaModal({ cadastros, onFechar, onRegistrada, onCadastrosMudaram })
     setSalvando(true);
     try {
       await registrarEntrada({
-        tipo: f.tipo, data: f.data, valor, conta_caixa_id: Number(f.contaCaixaId), forma_pagamento: f.forma,
+        tipo: f.tipo, data: f.data, valor, conta_caixa_id: Number(f.contaCaixaId), forma_pagamento_id: f.forma ? Number(f.forma) : null,
         pessoa_id: f.pessoaId ? Number(f.pessoaId) : null, campanha_id: f.tipo === "campanha" ? Number(f.campanhaId) : null,
         centro_custo_id: f.centroCustoId ? Number(f.centroCustoId) : null, descricao: f.descricao.trim(),
       });
@@ -288,9 +290,8 @@ function EntradaModal({ cadastros, onFechar, onRegistrada, onCadastrosMudaram })
           </div>
           <div>
             <label style={lbl} htmlFor="en-forma">Forma *</label>
-            <select id="en-forma" style={inp} value={f.forma} onChange={set("forma")}>
-              {Object.entries(FORMAS_RECEBIMENTO).map(([v, r]) => <option key={v} value={v}>{r}</option>)}
-            </select>
+            <FormaSelect id="en-forma" style={{ ...inp, ...(tentou && !f.forma ? { borderColor: "var(--danger)" } : {}) }} formas={cadastros.formas} semBoleto vazio="— Selecione —"
+              value={f.forma} onChange={(v) => setF((p) => ({ ...p, forma: v }))} />
           </div>
         </div>
 
@@ -375,7 +376,7 @@ function DetalheModal({ entrada: e, cadastros, podeEstornar, onFechar, onEstorna
       <div className="tributos-grid">
         <Campo rotulo="Data">{formatarData(e.data)}</Campo>
         <Campo rotulo="Valor">{formatarMoeda(e.valor)}</Campo>
-        <Campo rotulo="Forma">{FORMAS_RECEBIMENTO[e.forma_pagamento]}</Campo>
+        <Campo rotulo="Forma">{e.forma_pagamento_nome ?? nomeForma(cadastros.formas, e.forma_pagamento_id, e.forma_pagamento)}</Campo>
         <Campo rotulo="Conta caixa">{e.conta_caixa_nome}</Campo>
         <Campo rotulo={e.tipo === "dizimo" ? "Dizimista" : "Quem contribuiu"}>{e.pessoa_nome ? `${e.pessoa_nome}${pessoa?.documento ? ` · ${mascararDocumento(pessoa.tipo_pessoa, pessoa.documento)}` : ""}` : "Sem identificação"}</Campo>
         {e.campanha_nome && <Campo rotulo="Campanha">{e.campanha_nome}</Campo>}

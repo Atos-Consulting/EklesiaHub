@@ -13,6 +13,12 @@ export const FORMAS_PAGAMENTO = {
 export const TIPOS_ENTRADA = { dizimo: "Dízimo", oferta: "Oferta", campanha: "Campanha", outra: "Outra entrada" };
 // Tipos aceitos em entradas novas (v16): "outra" ficou só para as antigas; o resto vai como entrada avulsa em Caixa.
 export const TIPOS_ENTRADA_NOVA = { dizimo: "Dízimo", oferta: "Oferta", campanha: "Campanha" };
+// Formas de pagamento viraram cadastro (v18, Parâmetros → Financeiro → Formas de pagamento). FORMAS_PAGAMENTO acima
+// agora são os COMPORTAMENTOS possíveis de uma forma (o que a tela pede: linha digitável, chave PIX, banco...).
+export const COMPORTAMENTOS_FORMA = FORMAS_PAGAMENTO;
+export const formaPorId = (formas, id) => (formas || []).find((f) => String(f.id) === String(id ?? ""));
+// Nome para exibir: o da forma cadastrada; sem ela (dado antigo), o rótulo do comportamento.
+export const nomeForma = (formas, id, codigo) => formaPorId(formas, id)?.nome ?? FORMAS_PAGAMENTO[codigo] ?? codigo ?? "";
 export const FORMAS_RECEBIMENTO = Object.fromEntries(Object.entries(FORMAS_PAGAMENTO).filter(([k]) => k !== "boleto"));
 
 // Movimentos de caixa (v13) e as origens das linhas do extrato (view extrato_caixa).

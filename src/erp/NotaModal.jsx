@@ -6,7 +6,7 @@ import Modal from "./Modal";
 import PessoaModal from "./PessoaModal";
 import { TributosNota, TributosItem } from "./TributosCampos";
 import { CondicaoForm } from "./parametros/CondicoesPagamento";
-import { TIPOS_CONDICAO, FORMAS_PAGAMENTO, resumoCondicao, gerarParcelas, centavosRetencoes, situacaoTitulo } from "./financeiro";
+import { TIPOS_CONDICAO, nomeForma, resumoCondicao, gerarParcelas, centavosRetencoes, situacaoTitulo } from "./financeiro";
 import {
   carregarNota, salvarNota, aprovarNota, cancelarNota, excluirRascunho,
   enviarAnexo, removerAnexo, urlAnexo, mensagemErro,
@@ -571,7 +571,7 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
                 )}
               </div>
               {condicao
-                ? <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>{TIPOS_CONDICAO[condicao.tipo]}{condicao.forma_pagamento ? ` · ${FORMAS_PAGAMENTO[condicao.forma_pagamento]}` : ""} · {resumoCondicao(condicao)}</div>
+                ? <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>{TIPOS_CONDICAO[condicao.tipo]}{condicao.forma_pagamento ? ` · ${nomeForma(cadastros.formas, condicao.forma_pagamento_id, condicao.forma_pagamento)}` : ""} · {resumoCondicao(condicao)}</div>
                 : editavel && cadastros.condicoes.length === 0 && <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>Cadastre em Parâmetros → Condições de pagamento.</div>}
             </div>
             <div>
@@ -590,7 +590,7 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
             <div className="painel" style={{ paddingTop: 10 }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 6 }}>
                 <span className="muted" style={{ fontSize: 12.5 }}>Lançamentos gerados no Financeiro</span>
-                <a href="#/financeiro/contas/pagar" className="link-btn" style={{ fontSize: 12.5 }}>Abrir Contas a pagar</a>
+                <a href="#/financeiro/lancamentos/pagar" className="link-btn" style={{ fontSize: 12.5 }}>Abrir Lançamentos a pagar</a>
               </div>
               <table className="parcelas">
                 <thead><tr><th>Parcela</th><th>Vencimento</th><th className="num">Valor</th><th>Situação</th><th>Pago em</th></tr></thead>
@@ -615,7 +615,7 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
               <div className="muted" style={{ fontSize: 12.5, marginBottom: 6 }}>
                 {condicao.tipo === "a_vista"
                   ? "Prévia: ao aprovar, o valor é dado como pago pela conta caixa da nota."
-                  : `Prévia: ao aprovar, ${previa.length === 1 ? "esta parcela vai" : `estas ${previa.length} parcelas vão`} para Financeiro → Contas a pagar.`}
+                  : `Prévia: ao aprovar, ${previa.length === 1 ? "esta parcela vai" : `estas ${previa.length} parcelas vão`} para Financeiro → Lançamentos (a pagar).`}
                 {centRetencoes > 0 && " O valor é o líquido (total − retenções)."}
               </div>
               <table className="parcelas">
@@ -668,7 +668,7 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
       )}
 
       {novoFornecedor && <PessoaModal onSalvo={aoSalvarFornecedor} onFechar={() => setNovoFornecedor(false)} />}
-      {novaCondicao && <CondicaoForm condicao={null} onSalvo={aoSalvarCondicao} onFechar={() => setNovaCondicao(false)} />}
+      {novaCondicao && <CondicaoForm condicao={null} formas={cadastros.formas} onSalvo={aoSalvarCondicao} onFechar={() => setNovaCondicao(false)} />}
 
       {confirmacao === "aprovar" && (
         <Modal titulo="Aprovar nota?" largura={440} nivel={400} onFechar={() => setConfirmacao(null)}

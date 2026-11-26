@@ -31,7 +31,7 @@ const MODULOS = [
     telas: [{ id: "notas", rotulo: "Notas de entrada" }, { id: "fornecedores", rotulo: "Fornecedores" }, { id: "importar", rotulo: "Importar XML" }] },
   // Contas a pagar e a receber (mesma tela, por aba de situação), entradas (dízimos, ofertas, campanhas) e caixa (extrato e movimentos).
   { id: "financeiro", grupo: "Gestão", rotulo: "Financeiro", icone: "carteira", pronto: true,
-    telas: [{ id: "contas", rotulo: "Contas" }, { id: "entradas", rotulo: "Dízimos e ofertas" }, { id: "caixa", rotulo: "Caixa" }] },
+    telas: [{ id: "lancamentos", rotulo: "Lançamentos" }, { id: "entradas", rotulo: "Dízimos e ofertas" }, { id: "caixa", rotulo: "Caixa" }] },
   { id: "contabil", grupo: "Gestão", rotulo: "Contábil", icone: "calculadora", pronto: false, contabil: true,
     descricao: "Escrituração contábil integrada aos demais módulos.",
     previsto: ["Plano de contas editável", "Lançamentos em partidas dobradas", "Razão e balancete", "DRE e balanço patrimonial", "Contabilização automática das notas aprovadas"] },
@@ -48,12 +48,13 @@ const MODULOS = [
 // Rota por URL (#/modulo/tela): botão voltar, atualizar a página e links diretos funcionam.
 function lerRota() {
   const [, modulo = "", tela = "", aba = ""] = window.location.hash.replace(/^#/, "").split("/");
+  if (modulo === "financeiro" && tela === "contas") return { modulo, tela: "lancamentos", aba }; // nome anterior da tela
   const antiga = modulo === "financeiro" && ROTAS_ANTIGAS_FINANCEIRO[tela];
   return antiga ? { modulo, tela: antiga[0], aba: antiga[1] } : { modulo, tela, aba };
 }
 
 // Financeiro (reorganizado de 5 para 3 telas): endereços antigos continuam abrindo a aba certa.
-const ROTAS_ANTIGAS_FINANCEIRO = { pagar: ["contas", "pagar"], receber: ["contas", "receber"], fluxo: ["caixa", "fluxo"], relatorio: ["caixa", "relatorio"] };
+const ROTAS_ANTIGAS_FINANCEIRO = { pagar: ["lancamentos", "pagar"], receber: ["lancamentos", "receber"], fluxo: ["caixa", "fluxo"], relatorio: ["caixa", "relatorio"] };
 const ABAS_CONTAS = [{ id: "pagar", rotulo: "A pagar" }, { id: "receber", rotulo: "A receber" }];
 const ABAS_CAIXA = [{ id: "extrato", rotulo: "Extrato e movimentos" }, { id: "fluxo", rotulo: "Fluxo de caixa" }, { id: "relatorio", rotulo: "Relatório do mês" }];
 
@@ -214,7 +215,7 @@ export default function ErpApp({ perfil, onSair, onEmpresaTrocada }) {
       const natureza = rota.aba === "receber" ? "receber" : "pagar";
       return (
         <>
-          <AbasTela base="#/financeiro/contas" abas={ABAS_CONTAS} atual={natureza} rotulo="Contas a pagar ou a receber" />
+          <AbasTela base="#/financeiro/lancamentos" abas={ABAS_CONTAS} atual={natureza} rotulo="Contas a pagar ou a receber" />
           <ContasPagar key={natureza} natureza={natureza} cadastros={cadastros} podePagar={perm.pagar} onCadastrosMudaram={recarregarCadastros} />
         </>
       );

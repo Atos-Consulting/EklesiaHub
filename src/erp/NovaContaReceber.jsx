@@ -5,7 +5,8 @@ import Modal from "./Modal";
 import PessoaModal from "./PessoaModal";
 import { criarContasReceber, cancelarTituloReceber, mensagemErro } from "./db";
 import { formatarMoeda, formatarData, hojeISO, lerNumero, paraCentavos, somarValores, mascararDocumento } from "./format";
-import { FORMAS_PAGAMENTO, parcelasReceber } from "./financeiro";
+import { parcelasReceber } from "./financeiro";
+import FormaSelect from "./FormaSelect";
 
 const inteiro = (v) => (/^\d+$/.test(String(v).trim()) ? Number(v) : NaN);
 
@@ -14,7 +15,7 @@ export function NovaContaReceber({ cadastros, onFechar, onConcluido, onCadastros
   const caixasAtivas = cadastros.caixas.filter((c) => c.ativo);
   const [f, setF] = useState({
     pessoaId: "", descricao: "", valor: "", valorPor: "total", parcelas: "1", primeiroVencimento: hojeISO(), periodicidade: "mensal",
-    intervaloDias: "30", forma: "pix", contaCaixaId: caixasAtivas.length === 1 ? String(caixasAtivas[0].id) : "", centroCustoId: "", observacao: "",
+    intervaloDias: "30", forma: String((cadastros.formas || []).find((x) => x.ativo && x.tipo === "pix")?.id ?? ""), contaCaixaId: caixasAtivas.length === 1 ? String(caixasAtivas[0].id) : "", centroCustoId: "", observacao: "",
   });
   const [tentou, setTentou] = useState(false);
   const [salvando, setSalvando] = useState(false);
@@ -54,7 +55,7 @@ export function NovaContaReceber({ cadastros, onFechar, onConcluido, onCadastros
       await criarContasReceber({
         pessoa_id: Number(f.pessoaId), descricao: f.descricao.trim(), emissao: hojeISO(), valor, valor_por: f.valorPor, parcelas,
         primeiro_vencimento: f.primeiroVencimento, periodicidade: f.periodicidade, intervalo_dias: f.periodicidade === "dias" ? intervalo : null,
-        forma_pagamento: f.forma || null, conta_caixa_id: f.contaCaixaId ? Number(f.contaCaixaId) : null,
+        forma_pagamento_id: f.forma ? Number(f.forma) : null, conta_caixa_id: f.contaCaixaId ? Number(f.contaCaixaId) : null,
         centro_custo_id: f.centroCustoId ? Number(f.centroCustoId) : null, observacao: f.observacao.trim(),
       });
       await onConcluido();
@@ -128,10 +129,7 @@ export function NovaContaReceber({ cadastros, onFechar, onConcluido, onCadastros
         <div style={grade(170)}>
           <div>
             <label style={lbl} htmlFor="cr-forma">Forma prevista</label>
-            <select id="cr-forma" style={inp} value={f.forma} onChange={set("forma")}>
-              <option value="">— Não informada —</option>
-              {Object.entries(FORMAS_PAGAMENTO).map(([v, r]) => <option key={v} value={v}>{r}</option>)}
-            </select>
+            <FormaSelect id="cr-forma" style={inp} formas={cadastros.formas} value={f.forma} onChange={(v) => setF((p) => ({ ...p, forma: v }))} vazio="— Não informada —" />
           </div>
           <div>
             <label style={lbl} htmlFor="cr-caixa">Conta caixa prevista</label>

@@ -8,7 +8,8 @@ import { useOrdenacao } from "./useOrdenacao";
 import { listarTitulosPagar, listarTitulosReceber, listarPagamentosDoTitulo, pagarTitulo, receberTitulo, estornarPagamento, atualizarTitulo, mensagemErro } from "./db";
 import { NovaContaReceber, CancelarContaReceber } from "./NovaContaReceber";
 import { formatarMoeda, formatarData, hojeISO, lerNumero, paraCentavos, deCentavos, somarValores, mascararDocumento } from "./format";
-import { FORMAS_PAGAMENTO, ORIGEM_PAGAMENTO, situacaoTitulo, somarDias } from "./financeiro";
+import { ORIGEM_PAGAMENTO, nomeForma, formaPorId, situacaoTitulo, somarDias } from "./financeiro";
+import FormaSelect from "./FormaSelect";
 
 // Mesma tela para contas a pagar (geradas pelas notas) e contas a receber (lançadas aqui): a aba escolhe a situação.
 // Os textos de cada lado ficam em TEXTOS; os dados vêm das views titulos_pagar e titulos_receber (mesmas colunas).
@@ -176,7 +177,7 @@ export default function ContasPagar({ natureza = "pagar", cadastros, podePagar, 
                     onClick={() => setAcao({ tipo: "ver", titulo: t })} onKeyDown={(e) => { if (e.key === "Enter" && e.target === e.currentTarget) setAcao({ tipo: "ver", titulo: t }); }}>
                     <td style={sit.id === "vencido" ? { color: "var(--danger)", fontWeight: 600 } : undefined}>{formatarData(t.vencimento)}</td>
                     <td className="truncate" style={{ fontWeight: 550, maxWidth: 260 }}>{t.fornecedor_nome}</td>
-                    <td>{t.descricao}{t.forma_pagamento && <div className="muted" style={{ fontSize: 12 }}>{FORMAS_PAGAMENTO[t.forma_pagamento]}{temDadosPagamento(t) && " · dados informados"}</div>}</td>
+                    <td>{t.descricao}{t.forma_pagamento && <div className="muted" style={{ fontSize: 12 }}>{t.forma_pagamento_nome ?? nomeForma(cadastros.formas, t.forma_pagamento_id, t.forma_pagamento)}{temDadosPagamento(t) && " · dados informados"}</div>}</td>
                     <td>{t.parcela}/{t.total_parcelas}</td>
                     <td className="num" style={t.status === "cancelado" ? { textDecoration: "line-through" } : { fontWeight: 550 }}>{formatarMoeda(t.valor)}</td>
                     <td><Pill tone={sit.tom}>{sit.rotulo}</Pill></td>
@@ -213,7 +214,7 @@ export default function ContasPagar({ natureza = "pagar", cadastros, podePagar, 
           pagamentoId={acao.titulo.pagamento_id} onFechar={() => setAcao(null)} onConcluido={aoConcluir} />
       )}
       {acao?.tipo === "ver" && (
-        <LancamentoModal natureza={natureza} titulo={acao.titulo} caixas={cadastros.caixas} podePagar={podePagar} onFechar={() => setAcao(null)}
+        <LancamentoModal natureza={natureza} titulo={acao.titulo} caixas={cadastros.caixas} formas={cadastros.formas} podePagar={podePagar} onFechar={() => setAcao(null)}
           onCancelar={() => setAcao({ tipo: "cancelar", titulo: acao.titulo })}
           onSalvo={async () => { await Promise.all([recarregar(), onCadastrosMudaram()]); }}
           onPagar={() => setAcao({ tipo: "pagar", titulo: acao.titulo })} onEstornar={() => setAcao({ tipo: "estornar", titulo: acao.titulo })} />
@@ -365,12 +366,12 @@ function Copiar({ texto }) {
 }
 
 // Lançamento (título a pagar): dados da nota, vencimento e dados de pagamento, e o histórico de pagamentos.
-function LancamentoModal({ natureza, titulo: t, caixas, podePagar, onFechar, onSalvo, onPagar, onEstornar, onCancelar }) {
+function LancamentoModal({ natureza, titulo: t, caixas, formas, podePagar, onFechar, onSalvo, onPagar, onEstornar, onCancelar }) {
   const T = TEXTOS[natureza];
   const receber = natureza === "receber";
   const editavel = podePagar && t.status === "aberto";
   const [f, setF] = useState({
-    vencimento: t.vencimento, forma_pagamento: t.forma_pagamento ?? "", linha_digitavel: formatarLinha(t.linha_digitavel),
+    vencimento: t.vencimento, forma_pagamento_id: String(t.forma_pagamento_id ?? ""), linha_digitavel: formatarLinha(t.linha_digitavel),
     pix_chave: t.pix_chave ?? "", banco: t.banco ?? "", agencia: t.agencia ?? "", conta: t.conta ?? "", observacao: t.observacao ?? "",
   });
   const [historico, setHistorico] = useState(null);
@@ -381,7 +382,8 @@ function LancamentoModal({ natureza, titulo: t, caixas, podePagar, onFechar, onS
   const sit = situacaoTitulo(t, hojeISO(), natureza);
   const digitos = f.linha_digitavel.replace(/\D/g, "");
   const erroLinha = digitos && (digitos.length < 44 || digitos.length > 48) ? `A linha tem de 44 a 48 números (tem ${digitos.length})` : "";
-  const mostra = (forma, campo) => f.forma_pagamento === forma || Boolean(f[campo]);
+  const tipoForma = formaPorId(formas, f.forma_pagamento_id)?.tipo; // comportamento da forma escolhida
+  const mostra = (forma, campo) => tipoForma === forma || Boolean(f[campo]);
 
   useEffect(() => {
     let ativo = true;
@@ -395,7 +397,7 @@ function LancamentoModal({ natureza, titulo: t, caixas, podePagar, onFechar, onS
     if (!f.vencimento) { setErro("Informe o vencimento."); return; }
     if (erroLinha) { setErro(erroLinha); return; }
     setSalvando(true);
-    try { await atualizarTitulo(t.id, { ...f, linha_digitavel: digitos }); await onSalvo(); setOk(true); }
+    try { await atualizarTitulo(t.id, { ...f, forma_pagamento_id: f.forma_pagamento_id || null, linha_digitavel: digitos }); await onSalvo(); setOk(true); }
     catch (e) { setErro(mensagemErro(e)); }
     finally { setSalvando(false); }
   }
@@ -433,10 +435,8 @@ function LancamentoModal({ natureza, titulo: t, caixas, podePagar, onFechar, onS
             </div>
             <div>
               <label style={lbl} htmlFor="lc-forma">Forma de pagamento</label>
-              <select id="lc-forma" style={inp} value={f.forma_pagamento} onChange={set("forma_pagamento")}>
-                <option value="">— Não informada —</option>
-                {Object.entries(FORMAS_PAGAMENTO).map(([v, r]) => <option key={v} value={v}>{r}</option>)}
-              </select>
+              <FormaSelect id="lc-forma" style={inp} formas={formas} value={f.forma_pagamento_id} vazio="— Não informada —"
+                onChange={(v) => { setOk(false); setF((p) => ({ ...p, forma_pagamento_id: v })); }} />
             </div>
           </div>
           {mostra("boleto", "linha_digitavel") && (
@@ -473,7 +473,7 @@ function LancamentoModal({ natureza, titulo: t, caixas, podePagar, onFechar, onS
         <>
           <div style={grade}>
             {leitura("Vencimento", formatarData(t.vencimento))}
-            {leitura("Forma de pagamento", FORMAS_PAGAMENTO[t.forma_pagamento])}
+            {leitura("Forma de pagamento", t.forma_pagamento_nome ?? nomeForma(formas, t.forma_pagamento_id, t.forma_pagamento))}
           </div>
           {t.linha_digitavel && <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}><div style={{ flex: 1 }}>{leitura("Linha digitável", <span style={{ fontFamily: "monospace" }}>{formatarLinha(t.linha_digitavel)}</span>)}</div><Copiar texto={t.linha_digitavel} /></div>}
           {t.pix_chave && leitura("Chave PIX", t.pix_chave)}
