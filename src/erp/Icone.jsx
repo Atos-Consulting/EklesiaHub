@@ -31,6 +31,7 @@ const ICONES = {
   chevronBaixo: <path d="M6 9l6 6 6-6" />,
   livro: <><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z" /><path d="M4 21V5M9 7h6M9 11h6" /></>,
   editar:<><path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z" /><path d="M13.5 6.5l4 4" /></>,
+  impressora: <><path d="M7 8V3h10v5" /><rect x="3" y="8" width="18" height="9" rx="2" /><path d="M7 14h10v7H7z" /></>,
 };
 
 export default function Icone({ nome, tamanho = 18, traco = 1.75, ...resto }) {

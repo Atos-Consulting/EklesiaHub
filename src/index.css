@@ -410,3 +410,56 @@ input:disabled, select:disabled, textarea:disabled {
 /* Nota aprovada na lista: quadradinho verde cheio, fixo (não selecionável) */
 .check-aprovada { display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 4px; vertical-align: middle;
   background: #16a34a; border: 1px solid #16a34a; color: #fff; cursor: default; }
+
+
+/* ── Relatório do mês (prestação de contas) ─────────────────────────── */
+.relatorio-folha { max-width: 920px; margin: 0 auto; padding: 36px 44px; color: var(--text); }
+.rel-cabecalho { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; padding-bottom: 16px; border-bottom: 2px solid var(--text); }
+.rel-igreja { font-size: 13px; font-weight: 650; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.rel-titulo { margin: 4px 0 2px; font-size: 22px; line-height: 1.25; }
+.rel-sub { font-size: 13px; color: var(--muted); }
+.rel-emissao { font-size: 12px; color: var(--muted); text-align: right; white-space: nowrap; }
+.rel-resumo { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 20px 0 8px; }
+.rel-resumo > div { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; }
+.rel-resumo span { font-size: 12px; color: var(--muted); }
+.rel-resumo strong { font-size: 17px; font-variant-numeric: tabular-nums; }
+.rel-pos { color: var(--ok-text); }
+.rel-neg { color: var(--danger-text); }
+.rel-secao { margin-top: 24px; break-inside: avoid; }
+.rel-secao h3 { font-size: 14px; margin: 0 0 8px; text-transform: uppercase; letter-spacing: .04em; }
+.rel-tabela { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.rel-tabela th { text-align: left; font-size: 12px; font-weight: 600; color: var(--muted); padding: 6px 8px; border-bottom: 1px solid var(--border-strong); }
+.rel-tabela td { padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.rel-tabela .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.rel-tabela tfoot td { font-weight: 650; border-top: 1.5px solid var(--text); border-bottom: none; }
+.rel-tabela tr { break-inside: avoid; }
+.rel-grupo td { font-weight: 600; }
+.rel-filho td { font-size: 12.5px; color: var(--text-2); border-bottom-style: dashed; }
+.rel-filho td:first-child { padding-left: 26px; }
+.rel-sem-centro td:first-child { color: var(--danger-text); }
+.rel-var { font-size: 11px; color: var(--muted); margin-left: 4px; }
+.rel-nota { font-size: 12.5px; color: var(--muted); margin: 8px 0 0; }
+.rel-assinaturas { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; margin-top: 56px; break-inside: avoid; }
+.rel-assinaturas > div { text-align: center; font-size: 13px; }
+.rel-linha { display: block; border-top: 1px solid var(--text); margin-bottom: 6px; }
+.rel-aprovacao { grid-column: 1 / -1; text-align: center; font-size: 13px; margin: 0; }
+@media (max-width: 720px) {
+  .relatorio-folha { padding: 20px 16px; }
+  .rel-cabecalho { flex-direction: column; }
+  .rel-emissao { text-align: left; }
+  .rel-resumo { grid-template-columns: 1fr 1fr; }
+  .rel-assinaturas { grid-template-columns: 1fr; gap: 40px; }
+}
+
+@media print {
+  @page { size: A4; margin: 14mm 12mm; }
+  body { background: #fff !important; }
+  .sidebar, .sidebar-overlay, .topbar, .no-print { display: none !important; }
+  .shell, .main { display: block !important; min-height: 0 !important; }
+  .content { max-width: none !important; padding: 0 !important; }
+  .relatorio-folha { max-width: none; padding: 0; border: none !important; box-shadow: none !important; color: #000; }
+  .rel-resumo { grid-template-columns: repeat(4, 1fr); }
+  .rel-assinaturas { grid-template-columns: 1fr 1fr; }
+  .rel-pos, .rel-neg, .rel-sem-centro td:first-child { color: #000 !important; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}

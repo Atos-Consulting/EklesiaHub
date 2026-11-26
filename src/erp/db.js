@@ -432,6 +432,49 @@ export async function carregarFluxo(contaIds, { de, ate }) {
   };
 }
 
+// Relatório do mês (prestação de contas): extrato do mês anterior + mês do relatório, os detalhes que o extrato
+// não traz (centro de custo, fornecedor, campanha), saldos de cada conta e o que estava em aberto no fim do mês.
+// deAnt = 1º dia do mês anterior; de/ate = mês do relatório.
+export async function carregarRelatorioMes(contaIds, { deAnt, de, ate }) {
+  const antes = new Date(`${de}T12:00:00Z`);
+  antes.setUTCDate(antes.getUTCDate() - 1);
+  const diaAntes = antes.toISOString().slice(0, 10);
+  const depois = new Date(`${ate}T12:00:00Z`);
+  depois.setUTCDate(depois.getUTCDate() + 1);
+  const diaDepois = depois.toISOString().slice(0, 10);
+  // Em aberto no fim do mês: emitido até lá e ainda aberto, ou pago só depois (os cancelados depois vêm abaixo).
+  const emAberto = `status.eq.aberto,data_pagamento.gt.${ate}`;
+  const [linhas, pagos, recebidos, movimentos, entradas, abPagar, abReceber, ...saldos] = await Promise.all([
+    supabase.from("extrato_caixa").select("*").gte("data", deAnt).lte("data", ate).order("data").limit(20000),
+    supabase.from("titulos_pagar").select("pagamento_id, centro_custo_id, fornecedor_nome").not("pagamento_id", "is", null)
+      .gte("data_pagamento", deAnt).lte("data_pagamento", ate).limit(20000),
+    supabase.from("titulos_receber").select("pagamento_id, descricao, fornecedor_nome").not("pagamento_id", "is", null)
+      .gte("data_pagamento", deAnt).lte("data_pagamento", ate).limit(20000),
+    supabase.from("movimentos_caixa_lista").select("id, tipo, centro_custo_id, descricao").gte("data", deAnt).lte("data", ate).limit(20000),
+    supabase.from("entradas_lista").select("id, tipo, campanha_id, campanha_nome").gte("data", deAnt).lte("data", ate).limit(20000),
+    supabase.from("titulos_pagar").select("id, valor, vencimento").lte("emissao", ate).neq("status", "cancelado").or(emAberto).limit(20000),
+    supabase.from("titulos_receber").select("id, valor, vencimento").lte("emissao", ate).neq("status", "cancelado").or(emAberto).limit(20000),
+    ...contaIds.flatMap((id) => [
+      supabase.rpc("saldo_caixa_ate", { p_conta: id, p_data: diaAntes }),
+      supabase.rpc("saldo_caixa_ate", { p_conta: id, p_data: ate }),
+    ]),
+  ]);
+  const erro = [linhas, pagos, recebidos, movimentos, entradas, abPagar, abReceber, ...saldos].find((r) => r.error)?.error;
+  if (erro) throw erro;
+  // Cancelado depois do fim do mês também estava em aberto naquele dia.
+  const [cPagar, cReceber] = await Promise.all([
+    supabase.from("titulos_pagar").select("id, valor, vencimento").lte("emissao", ate).eq("status", "cancelado").gte("cancelado_em", diaDepois).limit(20000),
+    supabase.from("titulos_receber").select("id, valor, vencimento").lte("emissao", ate).eq("status", "cancelado").gte("cancelado_em", diaDepois).limit(20000),
+  ]);
+  if (cPagar.error) throw cPagar.error;
+  if (cReceber.error) throw cReceber.error;
+  return {
+    linhas: linhas.data, pagos: pagos.data, recebidos: recebidos.data, movimentos: movimentos.data, entradas: entradas.data,
+    abertoPagar: [...abPagar.data, ...cPagar.data], abertoReceber: [...abReceber.data, ...cReceber.data],
+    saldos: contaIds.map((id, i) => ({ conta_caixa_id: id, anterior: Number(saldos[2 * i].data ?? 0), final: Number(saldos[2 * i + 1].data ?? 0) })),
+  };
+}
+
 export async function listarMovimentos({ de, ate }) {
   let consulta = supabase.from("movimentos_caixa_lista").select("*");
   if (de) consulta = consulta.gte("data", de);
