@@ -8,6 +8,7 @@ import Entradas from "./Entradas";
 import MovimentosCaixa from "./MovimentosCaixa";
 import FluxoCaixa from "./FluxoCaixa";
 import RelatorioMes from "./RelatorioMes";
+import AbasTela from "./AbasTela";
 import Logs from "./Logs";
 import Fornecedores from "./Fornecedores";
 import ImportarXml from "./ImportarXml";
@@ -30,7 +31,7 @@ const MODULOS = [
     telas: [{ id: "notas", rotulo: "Notas de entrada" }, { id: "fornecedores", rotulo: "Fornecedores" }, { id: "importar", rotulo: "Importar XML" }] },
   // Contas a pagar e a receber (mesma tela, por aba de situação), entradas (dízimos, ofertas, campanhas) e caixa (extrato e movimentos).
   { id: "financeiro", grupo: "Gestão", rotulo: "Financeiro", icone: "carteira", pronto: true,
-    telas: [{ id: "pagar", rotulo: "Contas a pagar" }, { id: "receber", rotulo: "Contas a receber" }, { id: "entradas", rotulo: "Dízimos e ofertas" }, { id: "caixa", rotulo: "Movimentos de caixa" }, { id: "fluxo", rotulo: "Fluxo de caixa" }, { id: "relatorio", rotulo: "Relatório do mês" }] },
+    telas: [{ id: "contas", rotulo: "Contas" }, { id: "entradas", rotulo: "Dízimos e ofertas" }, { id: "caixa", rotulo: "Caixa" }] },
   { id: "contabil", grupo: "Gestão", rotulo: "Contábil", icone: "calculadora", pronto: false, contabil: true,
     descricao: "Escrituração contábil integrada aos demais módulos.",
     previsto: ["Plano de contas editável", "Lançamentos em partidas dobradas", "Razão e balancete", "DRE e balanço patrimonial", "Contabilização automática das notas aprovadas"] },
@@ -46,9 +47,15 @@ const MODULOS = [
 
 // Rota por URL (#/modulo/tela): botão voltar, atualizar a página e links diretos funcionam.
 function lerRota() {
-  const [, modulo = "", tela = ""] = window.location.hash.replace(/^#/, "").split("/");
-  return { modulo, tela };
+  const [, modulo = "", tela = "", aba = ""] = window.location.hash.replace(/^#/, "").split("/");
+  const antiga = modulo === "financeiro" && ROTAS_ANTIGAS_FINANCEIRO[tela];
+  return antiga ? { modulo, tela: antiga[0], aba: antiga[1] } : { modulo, tela, aba };
 }
+
+// Financeiro (reorganizado de 5 para 3 telas): endereços antigos continuam abrindo a aba certa.
+const ROTAS_ANTIGAS_FINANCEIRO = { pagar: ["contas", "pagar"], receber: ["contas", "receber"], fluxo: ["caixa", "fluxo"], relatorio: ["caixa", "relatorio"] };
+const ABAS_CONTAS = [{ id: "pagar", rotulo: "A pagar" }, { id: "receber", rotulo: "A receber" }];
+const ABAS_CAIXA = [{ id: "extrato", rotulo: "Extrato e movimentos" }, { id: "fluxo", rotulo: "Fluxo de caixa" }, { id: "relatorio", rotulo: "Relatório do mês" }];
 
 const iniciais = (nome) => {
   const partes = (nome || "?").trim().split(/\s+/);
@@ -193,10 +200,24 @@ export default function ErpApp({ perfil, onSair, onEmpresaTrocada }) {
     if (modulo.id === "logs") return <Logs />;
     if (modulo.id === "financeiro") {
       if (tela?.id === "entradas") return <Entradas cadastros={cadastros} podeRegistrar={perm.pagar} onCadastrosMudaram={recarregarCadastros} />;
-      if (tela?.id === "fluxo") return <FluxoCaixa cadastros={cadastros} />;
-      if (tela?.id === "relatorio") return <RelatorioMes cadastros={cadastros} perfil={perfil} />;
-      if (tela?.id === "caixa") return <MovimentosCaixa cadastros={cadastros} podeRegistrar={perm.pagar} onCadastrosMudaram={recarregarCadastros} />;
-      return <ContasPagar key={tela?.id} natureza={tela?.id === "receber" ? "receber" : "pagar"} cadastros={cadastros} podePagar={perm.pagar} onCadastrosMudaram={recarregarCadastros} />;
+      if (tela?.id === "caixa") {
+        const aba = ABAS_CAIXA.some((a) => a.id === rota.aba) ? rota.aba : "extrato";
+        return (
+          <>
+            <AbasTela base="#/financeiro/caixa" abas={ABAS_CAIXA} atual={aba} rotulo="Visões do caixa" />
+            {aba === "fluxo" && <FluxoCaixa cadastros={cadastros} />}
+            {aba === "relatorio" && <RelatorioMes cadastros={cadastros} perfil={perfil} />}
+            {aba === "extrato" && <MovimentosCaixa cadastros={cadastros} podeRegistrar={perm.pagar} onCadastrosMudaram={recarregarCadastros} />}
+          </>
+        );
+      }
+      const natureza = rota.aba === "receber" ? "receber" : "pagar";
+      return (
+        <>
+          <AbasTela base="#/financeiro/contas" abas={ABAS_CONTAS} atual={natureza} rotulo="Contas a pagar ou a receber" />
+          <ContasPagar key={natureza} natureza={natureza} cadastros={cadastros} podePagar={perm.pagar} onCadastrosMudaram={recarregarCadastros} />
+        </>
+      );
     }
     const props = { cadastros, podeEditar: perm.lancar, podeAprovar: perm.aprovar, podeAdministrar: perm.administrar, onCadastrosMudaram: recarregarCadastros };
     if (tela?.id === "fornecedores") return <Fornecedores {...props} />;

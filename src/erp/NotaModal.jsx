@@ -584,7 +584,7 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
             <div className="painel" style={{ paddingTop: 10 }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 6 }}>
                 <span className="muted" style={{ fontSize: 12.5 }}>Lançamentos gerados no Financeiro</span>
-                <a href="#/financeiro/pagar" className="link-btn" style={{ fontSize: 12.5 }}>Abrir Contas a pagar</a>
+                <a href="#/financeiro/contas/pagar" className="link-btn" style={{ fontSize: 12.5 }}>Abrir Contas a pagar</a>
               </div>
               <table className="parcelas">
                 <thead><tr><th>Parcela</th><th>Vencimento</th><th className="num">Valor</th><th>Situação</th><th>Pago em</th></tr></thead>

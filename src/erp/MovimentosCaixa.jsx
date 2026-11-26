@@ -12,7 +12,7 @@ import { TIPOS_MOVIMENTO, ORIGENS_EXTRATO, somarDias } from "./financeiro";
 const inicioDoMes = () => `${hojeISO().slice(0, 8)}01`;
 const VISOES = [{ id: "extrato", rotulo: "Extrato da conta" }, { id: "movimentos", rotulo: "Movimentos registrados" }];
 // Tela de onde veio cada linha do extrato que não é movimento de caixa.
-const TELA_ORIGEM = { entrada: "#/financeiro/entradas", pagamento: "#/financeiro/pagar", recebimento: "#/financeiro/receber" };
+const TELA_ORIGEM = { entrada: "#/financeiro/entradas", pagamento: "#/financeiro/contas/pagar", recebimento: "#/financeiro/contas/receber" };
 const NOME_TELA = { entrada: "Dízimos e ofertas", pagamento: "Contas a pagar", recebimento: "Contas a receber" };
 const ehMovimento = (origem) => !TELA_ORIGEM[origem];
 
@@ -107,7 +107,7 @@ export default function MovimentosCaixa({ cadastros, podeRegistrar, onCadastrosM
   return (
     <div>
       <div className="page-header">
-        <Header title="Movimentos de caixa" subtitle="Extrato de cada conta caixa (entradas, pagamentos, transferências e lançamentos avulsos) com o saldo dia a dia. Aqui também se registram transferências entre contas (ex.: depósito do caixa no banco), saídas sem nota (ex.: tarifa bancária) e entradas que não são contribuição (ex.: rendimento)." />
+        <Header title="Extrato e movimentos" subtitle="Extrato de cada conta caixa (entradas, pagamentos, transferências e lançamentos avulsos) com o saldo dia a dia. Aqui também se registram transferências entre contas (ex.: depósito do caixa no banco), saídas sem nota (ex.: tarifa bancária) e entradas que não são contribuição (ex.: rendimento)." />
         {podeRegistrar && <button className="btn btn-primary" onClick={() => setAcao({ tipo: "novo" })}><Icone nome="mais" tamanho={16} traco={2.2} /> Novo movimento</button>}
       </div>
 
