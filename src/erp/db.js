@@ -392,6 +392,18 @@ export async function listarEntradas({ de, ate }) {
   return data;
 }
 
+// Informe anual: entradas válidas do ano (só as colunas necessárias, sem o limite da lista da tela).
+export async function listarContribuicoesAno(ano) {
+  const linhas = [];
+  for (let pagina = 0; ; pagina++) {
+    const { data, error } = await supabase.from("entradas").select("id,pessoa_id,tipo,data,valor")
+      .eq("estornado", false).gte("data", `${ano}-01-01`).lte("data", `${ano}-12-31`).order("id").range(pagina * 1000, pagina * 1000 + 999);
+    if (error) throw error;
+    linhas.push(...data);
+    if (data.length < 1000) return linhas;
+  }
+}
+
 // dados: { tipo, data, valor, conta_caixa_id, forma_pagamento, pessoa_id, campanha_id, centro_custo_id, descricao }
 export async function registrarEntrada(dados) {
   const { data, error } = await supabase.rpc("registrar_entrada", { p_dados: dados });

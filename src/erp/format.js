@@ -144,3 +144,41 @@ export function formatarTamanho(bytes) {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
+
+// ── Valor por extenso (comprovantes e informes) ──
+const EXT_UN = ["", "um", "dois", "três", "quatro", "cinco", "seis", "sete", "oito", "nove", "dez", "onze", "doze", "treze", "quatorze",
+  "quinze", "dezesseis", "dezessete", "dezoito", "dezenove"];
+const EXT_DEZ = ["", "", "vinte", "trinta", "quarenta", "cinquenta", "sessenta", "setenta", "oitenta", "noventa"];
+const EXT_CEM = ["", "cento", "duzentos", "trezentos", "quatrocentos", "quinhentos", "seiscentos", "setecentos", "oitocentos", "novecentos"];
+const EXT_ESCALA = [null, null, ["milhão", "milhões"], ["bilhão", "bilhões"]];
+
+function extensoAte999(n) {
+  if (n === 100) return "cem";
+  const c = Math.floor(n / 100), r = n % 100, partes = [];
+  if (c) partes.push(EXT_CEM[c]);
+  if (r) partes.push(r < 20 ? EXT_UN[r] : (r % 10 ? `${EXT_DEZ[Math.floor(r / 10)]} e ${EXT_UN[r % 10]}` : EXT_DEZ[r / 10]));
+  return partes.join(" e ");
+}
+
+function inteiroPorExtenso(n) {
+  if (n === 0) return "zero";
+  const grupos = [];
+  for (let x = n; x > 0; x = Math.floor(x / 1000)) grupos.push(x % 1000);
+  const partes = [];
+  for (let i = grupos.length - 1; i >= 0; i--) {
+    const g = grupos[i];
+    if (!g) continue;
+    const texto = i === 1 ? (g === 1 ? "mil" : `${extensoAte999(g)} mil`) : i >= 2 ? `${extensoAte999(g)} ${EXT_ESCALA[i][g === 1 ? 0 : 1]}` : extensoAte999(g);
+    partes.push({ texto, g });
+  }
+  // "mil e quinhentos", "dois mil trezentos e dez": o "e" só antes do último grupo quando ele é < 100 ou centena redonda.
+  return partes.reduce((acc, p, k) => (k === 0 ? p.texto : `${acc}${k === partes.length - 1 && (p.g < 100 || p.g % 100 === 0) ? " e " : " "}${p.texto}`), "");
+}
+
+export function valorPorExtenso(valor) {
+  const cent = Math.round(Math.abs(Number(valor) || 0) * 100);
+  const reais = Math.floor(cent / 100), centavos = cent % 100, partes = [];
+  if (reais) partes.push(`${inteiroPorExtenso(reais)}${reais >= 1e6 && reais % 1e6 === 0 ? " de" : ""} ${reais === 1 ? "real" : "reais"}`);
+  if (centavos) partes.push(`${inteiroPorExtenso(centavos)} ${centavos === 1 ? "centavo" : "centavos"}`);
+  return partes.length ? partes.join(" e ") : "zero real";
+}

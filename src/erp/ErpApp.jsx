@@ -11,6 +11,7 @@ import RelatorioMes from "./RelatorioMes";
 import AbasTela from "./AbasTela";
 import Conciliacao from "./Conciliacao";
 import ContasFixas from "./ContasFixas";
+import InformeAnual from "./InformeAnual";
 import Logs from "./Logs";
 import Fornecedores from "./Fornecedores";
 import ImportarXml from "./ImportarXml";
@@ -57,6 +58,7 @@ function lerRota() {
 
 // Financeiro (reorganizado de 5 para 3 telas): endereços antigos continuam abrindo a aba certa.
 const ROTAS_ANTIGAS_FINANCEIRO = { pagar: ["lancamentos", "pagar"], receber: ["lancamentos", "receber"], fluxo: ["caixa", "fluxo"], relatorio: ["caixa", "relatorio"] };
+const ABAS_ENTRADAS = [{ id: "lista", rotulo: "Entradas" }, { id: "informe", rotulo: "Informe anual" }];
 const ABAS_CONTAS = [{ id: "pagar", rotulo: "A pagar" }, { id: "receber", rotulo: "A receber" }, { id: "fixas", rotulo: "Contas fixas" }];
 const ABAS_CAIXA = [{ id: "extrato", rotulo: "Extrato de Caixa" }, { id: "conciliacao", rotulo: "Conciliação" }, { id: "fluxo", rotulo: "Fluxo de caixa" }, { id: "relatorio", rotulo: "Relatório do mês" }];
 
@@ -202,7 +204,17 @@ export default function ErpApp({ perfil, onSair, onEmpresaTrocada }) {
     if (modulo.id === "parametros") return <Parametros aba={tela?.id} perfil={perfil} cadastros={cadastros} onCadastrosMudaram={recarregarCadastros} />;
     if (modulo.id === "logs") return <Logs />;
     if (modulo.id === "financeiro") {
-      if (tela?.id === "entradas") return <Entradas cadastros={cadastros} podeRegistrar={perm.registrarEntrada} podeEstornar={perm.pagar} onCadastrosMudaram={recarregarCadastros} />;
+      if (tela?.id === "entradas") {
+        const abaEnt = rota.aba === "informe" ? "informe" : "lista";
+        return (
+          <>
+            <AbasTela base="#/financeiro/entradas" abas={ABAS_ENTRADAS} atual={abaEnt} rotulo="Dízimos e ofertas" />
+            {abaEnt === "informe"
+              ? <InformeAnual cadastros={cadastros} perfil={perfil} />
+              : <Entradas cadastros={cadastros} perfil={perfil} podeRegistrar={perm.registrarEntrada} podeEstornar={perm.pagar} onCadastrosMudaram={recarregarCadastros} />}
+          </>
+        );
+      }
       if (tela?.id === "caixa") {
         const aba = ABAS_CAIXA.some((a) => a.id === rota.aba) ? rota.aba : "extrato";
         return (

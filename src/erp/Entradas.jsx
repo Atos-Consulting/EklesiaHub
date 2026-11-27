@@ -6,10 +6,13 @@ import Modal from "./Modal";
 import PessoaModal from "./PessoaModal";
 import ThOrdenavel from "./ThOrdenavel";
 import { useOrdenacao } from "./useOrdenacao";
-import { listarEntradas, registrarEntrada, estornarEntrada, mensagemErro } from "./db";
+import { listarEntradas, registrarEntrada, estornarEntrada, mensagemErro, buscarEmpresa } from "./db";
 import { formatarMoeda, formatarData, hojeISO, lerNumero, somarValores, mascararDocumento } from "./format";
 import { TIPOS_ENTRADA, TIPOS_ENTRADA_NOVA, nomeForma } from "./financeiro";
 import FormaSelect from "./FormaSelect";
+import Impressao from "./Impressao";
+import { ComprovanteEntrada } from "./DocumentosEntrada";
+import { useCarga } from "./useCarga";
 
 const SITUACOES = [{ id: "validas", rotulo: "Válidas" }, { id: "estornadas", rotulo: "Estornadas" }, { id: "todas", rotulo: "Todas" }];
 const naSituacao = (e, s) => s === "todas" || (s === "validas" ? !e.estornado : e.estornado);
@@ -41,7 +44,9 @@ function Indicador({ icone, rotulo, valor, sub }) {
 }
 
 // Financeiro → Dízimos e ofertas. Cada entrada soma no saldo da conta caixa; errou, estorna e lança de novo.
-export default function Entradas({ cadastros, podeRegistrar, podeEstornar, onCadastrosMudaram }) {
+export default function Entradas({ cadastros, perfil, podeRegistrar, podeEstornar, onCadastrosMudaram }) {
+  const [comprovante, setComprovante] = useState(null); // entrada sendo impressa
+  const empresa = useCarga(comprovante && perfil?.empresa_id ? `emp|${perfil.empresa_id}` : null, () => buscarEmpresa(perfil.empresa_id));
   const [filtros, setFiltros] = useState(() => ({ de: inicioDoMes(), ate: hojeISO(), busca: "", tipo: "", caixa: "" }));
   const [situacao, setSituacao] = useState("validas");
   const [resultado, setResultado] = useState({ chave: null, lista: [], erro: "" });
@@ -187,8 +192,13 @@ export default function Entradas({ cadastros, podeRegistrar, podeEstornar, onCad
 
       {acao?.tipo === "nova" && <EntradaModal cadastros={cadastros} onFechar={() => setAcao(null)} onRegistrada={atualizar} onCadastrosMudaram={onCadastrosMudaram} />}
       {acao?.tipo === "ver" && (
-        <DetalheModal entrada={acao.entrada} cadastros={cadastros} podeEstornar={podeEstornar} onFechar={() => setAcao(null)}
+        <DetalheModal entrada={acao.entrada} cadastros={cadastros} podeEstornar={podeEstornar} onFechar={() => setAcao(null)} onComprovante={() => setComprovante(acao.entrada)}
           onEstornar={() => setAcao({ tipo: "estornar", entrada: acao.entrada })} />
+      )}
+      {comprovante && (empresa.dados || empresa.erro) && (
+        <Impressao onFim={() => setComprovante(null)}>
+          <ComprovanteEntrada entrada={comprovante} pessoa={cadastros.pessoas.find((p) => p.id === comprovante.pessoa_id)} empresa={empresa.dados} nomeIgreja={perfil?.empresa_nome} />
+        </Impressao>
       )}
       {acao?.tipo === "estornar" && (
         <EstornoEntradaModal entrada={acao.entrada} onFechar={() => setAcao(null)} onConcluido={async () => { setAcao(null); await atualizar(); }} />
@@ -358,14 +368,15 @@ function Campo({ rotulo, children }) {
   );
 }
 
-function DetalheModal({ entrada: e, cadastros, podeEstornar, onFechar, onEstornar }) {
+function DetalheModal({ entrada: e, cadastros, podeEstornar, onFechar, onEstornar, onComprovante }) {
   const pessoa = cadastros.pessoas.find((p) => p.id === e.pessoa_id);
   return (
     <Modal titulo={`${TIPOS_ENTRADA[e.tipo]} de ${formatarMoeda(e.valor)}`} largura={560} onFechar={onFechar}
       extra={e.estornado ? <Pill tone="danger">Estornada</Pill> : <Pill tone="ok">Válida</Pill>}
       rodape={<>
+        {podeEstornar && !e.estornado && <button className="btn btn-danger" style={{ marginRight: "auto" }} onClick={onEstornar}>Estornar</button>}
         <button className="btn btn-ghost" onClick={onFechar}>Fechar</button>
-        {podeEstornar && !e.estornado && <button className="btn btn-danger" onClick={onEstornar}>Estornar</button>}
+        {!e.estornado && <button className="btn btn-primary" onClick={onComprovante}><Icone nome="impressora" tamanho={15} /> Comprovante</button>}
       </>}>
       {e.estornado && (
         <div className="alert alert-danger" style={{ marginBottom: 12 }}>
