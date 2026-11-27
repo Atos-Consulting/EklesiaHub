@@ -2,7 +2,8 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import { Header } from "../ui";
 import { inp } from "../estilos";
 import Icone from "./Icone";
-import { carregarRelatorioMes, mensagemErro } from "./db";
+import { carregarRelatorioMes, listarOrcamento, listarFechamentos, mensagemErro } from "./db";
+import { useCarga } from "./useCarga";
 import { exportarParaContador } from "./exportarContador";
 import { urlLogo } from "./db";
 import { formatarMoeda, formatarData, hojeISO, paraCentavos, deCentavos } from "./format";
@@ -118,6 +119,19 @@ export default function RelatorioMes({ cadastros, perfil }) {
     return () => { ativo = false; };
   }, [chave]); // eslint-disable-line react-hooks/exhaustive-deps -- contas e mês já estão na chave
   const dados = resultado.chave === chave ? resultado.dados : null;
+  // Orçado do mês por centro de custo (v23); sem orçamento no ano, a coluna não aparece.
+  const anoRel = mesOk ? Number(mes.slice(0, 4)) : null;
+  const orcAno = useCarga(anoRel ? `rel-orc|${anoRel}` : null, () => listarOrcamento(anoRel).catch(() => []));
+  const orcadoMes = useMemo(() => {
+    const m = new Map();
+    if (!mesOk) return m;
+    for (const o of orcAno.dados ?? []) if (o.natureza === "despesa") m.set(o.centro_custo_id, paraCentavos(o.valores[Number(mes.slice(5, 7)) - 1]));
+    return m;
+  }, [orcAno.dados, mes, mesOk]);
+  const comOrcado = orcAno.dados?.some((o) => o.natureza === "despesa") ?? false;
+  // Fechamento do mês (v24): o relatório mostra se o mês já foi fechado.
+  const fechs = useCarga("rel-fech", () => listarFechamentos().catch(() => []));
+  const fechadoMes = mesOk ? (fechs.dados ?? []).find((f) => !f.reaberto && f.mes === primeiroDia(mes)) : null;
   const erro = resultado.chave === chave ? resultado.erro : "";
 
   const rel = useMemo(() => {
@@ -238,6 +252,7 @@ export default function RelatorioMes({ cadastros, perfil }) {
               <div className="rel-igreja">{perfil?.empresa_nome}</div>
               <h2 className="rel-titulo">Prestação de contas — {nomeMes(mes)}</h2>
               <div className="rel-sub">Período de {formatarData(periodo.de)} a {formatarData(periodo.ate)}{emAndamento ? " (mês em andamento)" : ""}</div>
+              {fechadoMes && <div className="rel-fechado"><Icone nome="cadeado" tamanho={13} /> Mês fechado em {formatarData(fechadoMes.criado_em.slice(0, 10))}{fechadoMes.fechado_por_nome ? ` por ${fechadoMes.fechado_por_nome}` : ""}</div>}
             </div>
             <div className="rel-emissao">Emitido em {formatarData(hoje)}{nomeUsuario ? <><br />por {nomeUsuario}</> : null}</div>
           </header>
@@ -266,21 +281,26 @@ export default function RelatorioMes({ cadastros, perfil }) {
           <section className="rel-secao">
             <h3>2. Saídas por centro de custo</h3>
             <table className="rel-tabela">
-              <thead><tr><th>Centro de custo / maiores fornecedores</th><th className="num">{nomeMes(mes).split(" ")[0]}</th><th className="num">Mês anterior</th></tr></thead>
+              <thead><tr><th>Centro de custo / maiores fornecedores</th><th className="num">{nomeMes(mes).split(" ")[0]}</th>{comOrcado && <th className="num">Orçado no mês</th>}<th className="num">Mês anterior</th></tr></thead>
               <tbody>
-                {rel.linhasSaida.length === 0 && <tr><td colSpan={3} className="muted">Nenhuma saída.</td></tr>}
+                {rel.linhasSaida.length === 0 && <tr><td colSpan={comOrcado ? 4 : 3} className="muted">Nenhuma saída.</td></tr>}
                 {rel.linhasSaida.map((g) => (
                   <Fragment key={g.chave}>
                     <tr className={`rel-grupo${g.chave === SEM_CENTRO ? " rel-sem-centro" : ""}`}>
-                      <td>{g.rotulo}</td><td className="num">{moedaOuTraco(g.c)} <Variacao atual={g.c} anterior={g.ant} /></td><td className="num muted">{moedaOuTraco(g.ant)}</td>
+                      <td>{g.rotulo}</td><td className={`num${comOrcado && orcadoMes.has(g.chave) && g.c > orcadoMes.get(g.chave) ? " rel-neg" : ""}`}>{moedaOuTraco(g.c)} <Variacao atual={g.c} anterior={g.ant} /></td>{comOrcado && <td className="num muted">{moedaOuTraco(orcadoMes.get(g.chave) ?? 0)}</td>}<td className="num muted">{moedaOuTraco(g.ant)}</td>
                     </tr>
                     {g.filhos.map((f) => (
-                      <tr key={f.nome} className="rel-filho"><td>{f.nome}</td><td className="num">{moeda(f.c)}</td><td /></tr>
+                      <tr key={f.nome} className="rel-filho"><td>{f.nome}</td><td className="num">{moeda(f.c)}</td>{comOrcado && <td />}<td /></tr>
                     ))}
                   </Fragment>
                 ))}
+                {comOrcado && [...orcadoMes].filter(([id, v]) => v > 0 && !rel.linhasSaida.some((g) => g.chave === id)).map(([id, v]) => (
+                  <tr key={`orc-${id}`} className="rel-grupo">
+                    <td>{cadastros.centros.find((c) => c.id === id)?.nome ?? `Centro ${id}`}</td><td className="num">—</td><td className="num muted">{moeda(v)}</td><td className="num muted">—</td>
+                  </tr>
+                ))}
               </tbody>
-              <tfoot><tr><td>Total de saídas</td><td className="num">{moeda(rel.atual.totalSaidas)}</td><td className="num">{moeda(rel.anterior.totalSaidas)}</td></tr></tfoot>
+              <tfoot><tr><td>Total de saídas</td><td className="num">{moeda(rel.atual.totalSaidas)}</td>{comOrcado && <td className="num">{moeda([...orcadoMes.values()].reduce((a, v) => a + v, 0))}</td>}<td className="num">{moeda(rel.anterior.totalSaidas)}</td></tr></tfoot>
             </table>
             {rel.semCentro > 0 && (
               <p className="rel-nota">{moeda(rel.semCentro)} em saídas sem centro de custo: notas antigas sem centro de custo ou saídas avulsas lançadas sem centro.</p>

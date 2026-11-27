@@ -9,8 +9,10 @@ import { CondicaoForm } from "./parametros/CondicoesPagamento";
 import { TIPOS_CONDICAO, nomeForma, resumoCondicao, gerarParcelas, centavosRetencoes, situacaoTitulo } from "./financeiro";
 import {
   carregarNota, salvarNota, aprovarNota, cancelarNota, excluirRascunho,
-  enviarAnexo, removerAnexo, urlAnexo, mensagemErro,
+  enviarAnexo, removerAnexo, urlAnexo, carregarOrcamento, mensagemErro,
 } from "./db";
+import { useCarga } from "./useCarga";
+import { juntarOrcamento, avisosDaNota, dividirProporcional } from "./calculoOrcamento";
 import {
   TIPOS_NOTA, STATUS_NOTA, TOM_STATUS, formatarMoeda, formatarData, formatarTamanho, hojeISO,
   lerNumero, numeroParaCampo, paraCentavos, deCentavos, totalItem, validarAnexo, mascararDocumento,
@@ -134,6 +136,17 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
     + (form.fiscal.iss_retido === true ? cent(form.fiscal.iss) : 0);
   const centLiquido = totalCent - centavosRetencoes(form.fiscal);
   const previa = gerarParcelas(condicao, { emissao: form.dataEmissao, entrada: form.dataEntrada, centavos: centLiquido });
+
+  // Orçamento (v23): ao confirmar a aprovação, avisa (sem bloquear) os centros que passariam do orçado no ano da emissão.
+  const anoNota = Number((form.dataEmissao || hojeISO()).slice(0, 4));
+  const cargaOrc = useCarga(confirmacao === "aprovar" ? `orc-nota|${anoNota}` : null, () => carregarOrcamento(anoNota));
+  const avisosOrc = useMemo(() => {
+    if (confirmacao !== "aprovar" || !cargaOrc.dados) return [];
+    const pesos = itensAtivos.filter((i) => i.centroCustoId).map((i) => ({ centro: Number(i.centroCustoId), peso: paraCentavos(dinheiro(i.valorTotal)) }));
+    const partes = dividirProporcional(centLiquido, pesos);
+    const nome = (id) => cadastros.centros.find((c) => c.id === id)?.nome ?? `Centro ${id}`;
+    return avisosDaNota(juntarOrcamento(cargaOrc.dados.orcamentos, cargaOrc.dados.realizado), partes, nome);
+  }, [confirmacao, cargaOrc.dados]); // eslint-disable-line react-hooks/exhaustive-deps -- itens e valores não mudam com a confirmação aberta
 
   // ── Validação ──
   const erros = { itens: {} };
@@ -679,6 +692,17 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
               ? <>O valor de <strong>{formatarMoeda(deCentavos(centLiquido))}</strong> sairá agora da conta caixa <strong>{caixaSelecionada?.nome}</strong>.</>
               : <>Serão geradas <strong>{previa.length} parcela(s)</strong> somando <strong>{formatarMoeda(deCentavos(centLiquido))}</strong> em Contas a pagar; o dinheiro sai da conta caixa quando cada parcela for paga.</>}
           </p>
+          {avisosOrc.length > 0 && (
+            <div className="orc-aviso" role="status">
+              <strong>Atenção ao orçamento de {anoNota}:</strong> com esta nota,
+              <ul>
+                {avisosOrc.map((a) => (
+                  <li key={a.centro}><strong>{a.nome}</strong> passa do orçado em {formatarMoeda(deCentavos(a.excesso))} (orçado {formatarMoeda(deCentavos(a.orcado))}; já usado, entre pago e a pagar, {formatarMoeda(deCentavos(a.usado))}).</li>
+                ))}
+              </ul>
+              <div style={{ marginTop: 6 }}>É só um aviso: a nota pode ser aprovada.</div>
+            </div>
+          )}
         </Modal>
       )}
       {confirmacao === "excluir" && (

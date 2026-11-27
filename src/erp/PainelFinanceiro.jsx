@@ -3,7 +3,8 @@ import { Header, Pill } from "../ui";
 import Icone from "./Icone";
 import { Indicador } from "./ContasPagar";
 import { useCarga } from "./useCarga";
-import { carregarPainel } from "./db";
+import { carregarPainel, carregarOrcamento, listarFechamentos } from "./db";
+import { juntarOrcamento, medirLinha } from "./calculoOrcamento";
 import { formatarMoeda, formatarData, hojeISO, paraCentavos, deCentavos } from "./format";
 import { somarDias, somarMeses } from "./financeiro";
 
@@ -104,6 +105,16 @@ export default function PainelFinanceiro({ cadastros }) {
   const ids = contas.map((c) => c.id);
   const dados = useCarga(`painel|${hoje}|${ids.join(",")}|${versao}`, () => carregarPainel(ids, { deAnt: inicioAnt, ate: hoje }));
   const d = dados.dados;
+  // Orçamento do ano (v23): centros que já passaram do orçado (pago + a pagar). Sem orçamento (ou sem a v23), nada aparece.
+  const anoAtual = Number(hoje.slice(0, 4));
+  const orc = useCarga(`painel-orc|${anoAtual}|${versao}`, () => carregarOrcamento(anoAtual));
+  // Fechamento do mês (v24): avisa se o mês passado ainda não foi fechado (sem a v24, nada aparece).
+  const fechs = useCarga(`painel-fech|${versao}`, () => listarFechamentos().catch(() => null));
+  const mesPassado = inicioAnt;
+  const mesPassadoAberto = Array.isArray(fechs.dados) && !fechs.dados.some((f) => !f.reaberto && f.mes >= mesPassado);
+  const estourados = orc.dados
+    ? [...juntarOrcamento(orc.dados.orcamentos, orc.dados.realizado).values()].filter((l) => l.natureza === "despesa" && medirLinha(l, 12).situacao === "estourado")
+    : [];
 
   const saldoTotal = contas.reduce((a, c) => a + paraCentavos(c.saldo_atual), 0);
   const atual = d ? somarPeriodo(d.linhas, inicioMes, hoje) : {};
@@ -137,6 +148,12 @@ export default function PainelFinanceiro({ cadastros }) {
       href: "#/financeiro/caixa/conciliacao",
     })) : []),
     ...(rp.vencidos ? [{ id: "venc-pagar", texto: `${rp.vencidos} conta(s) a pagar vencida(s), ${moeda(rp.valorVencidos)}`, href: "#/financeiro/lancamentos/pagar/vencido" }] : []),
+    ...(mesPassadoAberto ? [{ id: "fechamento", texto: `O mês de ${new Intl.DateTimeFormat("pt-BR", { month: "long", timeZone: "UTC" }).format(new Date(`${mesPassado}T12:00:00Z`))} ainda não foi fechado`, href: "#/financeiro/caixa/fechamento" }] : []),
+    ...(estourados.length ? [{
+      id: "orcamento",
+      texto: `${estourados.length === 1 ? "1 centro de custo passou" : `${estourados.length} centros de custo passaram`} do orçado de ${anoAtual}: ${estourados.map((l) => cadastros.centros.find((c) => c.id === l.id)?.nome ?? l.id).join(", ")}`,
+      href: "#/financeiro/orcamento",
+    }] : []),
     ...(rr.vencidos ? [{ id: "venc-receber", texto: `${rr.vencidos} conta(s) a receber vencida(s), ${moeda(rr.valorVencidos)}`, href: "#/financeiro/lancamentos/receber/vencido" }] : []),
   ];
   const nomeMesAtual = new Intl.DateTimeFormat("pt-BR", { month: "long", timeZone: "UTC" }).format(new Date(`${inicioMes}T12:00:00Z`));

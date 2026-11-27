@@ -13,6 +13,8 @@ import Conciliacao from "./Conciliacao";
 import ImportarOfx from "./ImportarOfx";
 import ContasFixas from "./ContasFixas";
 import PainelFinanceiro from "./PainelFinanceiro";
+import Orcamento from "./Orcamento";
+import FechamentoMes from "./FechamentoMes";
 import InformeAnual from "./InformeAnual";
 import Logs from "./Logs";
 import Fornecedores from "./Fornecedores";
@@ -37,7 +39,7 @@ const MODULOS = [
     telas: [{ id: "notas", rotulo: "Notas de entrada" }, { id: "fornecedores", rotulo: "Fornecedores" }, { id: "importar", rotulo: "Importar XML" }] },
   // Contas a pagar e a receber (mesma tela, por aba de situação), entradas (dízimos, ofertas, campanhas) e caixa (extrato e movimentos).
   { id: "financeiro", grupo: "Gestão", rotulo: "Financeiro", icone: "carteira", pronto: true,
-    telas: [{ id: "painel", rotulo: "Painel" }, { id: "lancamentos", rotulo: "Lançamentos" }, { id: "entradas", rotulo: "Dízimos e ofertas" }, { id: "caixa", rotulo: "Caixa" }] },
+    telas: [{ id: "painel", rotulo: "Painel" }, { id: "lancamentos", rotulo: "Lançamentos" }, { id: "entradas", rotulo: "Dízimos e ofertas" }, { id: "caixa", rotulo: "Caixa" }, { id: "orcamento", rotulo: "Orçamento" }] },
   { id: "contabil", grupo: "Gestão", rotulo: "Contábil", icone: "calculadora", pronto: false, contabil: true,
     descricao: "Escrituração contábil integrada aos demais módulos.",
     previsto: ["Plano de contas editável", "Lançamentos em partidas dobradas", "Razão e balancete", "DRE e balanço patrimonial", "Contabilização automática das notas aprovadas"] },
@@ -63,7 +65,7 @@ function lerRota() {
 const ROTAS_ANTIGAS_FINANCEIRO = { pagar: ["lancamentos", "pagar"], receber: ["lancamentos", "receber"], fluxo: ["caixa", "fluxo"], relatorio: ["caixa", "relatorio"] };
 const ABAS_ENTRADAS = [{ id: "lista", rotulo: "Entradas" }, { id: "informe", rotulo: "Informe anual" }];
 const ABAS_CONTAS = [{ id: "pagar", rotulo: "A pagar" }, { id: "receber", rotulo: "A receber" }, { id: "fixas", rotulo: "Contas fixas" }];
-const ABAS_CAIXA = [{ id: "extrato", rotulo: "Extrato de Caixa" }, { id: "conciliacao", rotulo: "Fechamento do dia" }, { id: "ofx", rotulo: "Extrato do banco (OFX)" }, { id: "fluxo", rotulo: "Fluxo de caixa" }, { id: "relatorio", rotulo: "Relatório do mês" }];
+const ABAS_CAIXA = [{ id: "extrato", rotulo: "Extrato de Caixa" }, { id: "conciliacao", rotulo: "Fechamento do dia" }, { id: "ofx", rotulo: "Extrato do banco (OFX)" }, { id: "fluxo", rotulo: "Fluxo de caixa" }, { id: "relatorio", rotulo: "Relatório do mês" }, { id: "fechamento", rotulo: "Fechamento do mês" }];
 
 const iniciais = (nome) => {
   const partes = (nome || "?").trim().split(/\s+/);
@@ -214,6 +216,7 @@ export default function ErpApp({ perfil: perfilInicial, onSair, onEmpresaTrocada
     if (modulo.id === "logs") return <Logs />;
     if (modulo.id === "financeiro") {
       if (tela?.id === "painel") return <PainelFinanceiro cadastros={cadastros} />;
+      if (tela?.id === "orcamento") return <Orcamento cadastros={cadastros} podeEditar={perm.administrar} />;
       if (tela?.id === "entradas") {
         const abaEnt = rota.aba === "informe" ? "informe" : "lista";
         return (
@@ -234,6 +237,7 @@ export default function ErpApp({ perfil: perfilInicial, onSair, onEmpresaTrocada
             {aba === "ofx" && <ImportarOfx cadastros={cadastros} podeRegistrar={perm.pagar} onCadastrosMudaram={recarregarCadastros} />}
             {aba === "fluxo" && <FluxoCaixa cadastros={cadastros} />}
             {aba === "relatorio" && <RelatorioMes cadastros={cadastros} perfil={perfil} />}
+            {aba === "fechamento" && <FechamentoMes podeFechar={perm.pagar} podeReabrir={perm.administrar} />}
             {aba === "extrato" && <MovimentosCaixa cadastros={cadastros} podeRegistrar={perm.pagar} onCadastrosMudaram={recarregarCadastros} />}
           </>
         );

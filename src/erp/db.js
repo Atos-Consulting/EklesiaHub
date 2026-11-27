@@ -722,6 +722,57 @@ export async function urlComprovante(caminho, baixar = false) {
   return data.signedUrl;
 }
 
+// ── Orçamento anual (v23) ──
+
+// Orçamento gravado e realizado/em aberto do ano (por mês), para a tela de Orçamento, o Painel e o aviso da nota.
+export async function carregarOrcamento(ano) {
+  const [orc, real] = await Promise.all([
+    supabase.from("orcamentos").select("natureza, centro_custo_id, categoria, valores, atualizado_em, atualizado_por_nome").eq("ano", ano).limit(1000),
+    supabase.rpc("orcamento_realizado", { p_ano: ano }),
+  ]);
+  if (orc.error) throw orc.error;
+  if (real.error) throw real.error;
+  return { orcamentos: orc.data, realizado: real.data };
+}
+
+export async function listarOrcamento(ano) {
+  const { data, error } = await supabase.from("orcamentos").select("natureza, centro_custo_id, categoria, valores").eq("ano", ano).limit(1000);
+  if (error) throw error;
+  return data;
+}
+
+// linhas: [{ natureza, centro_custo_id | categoria, valores: [12 números em reais] }]
+export async function salvarOrcamento(ano, linhas) {
+  const { error } = await supabase.rpc("salvar_orcamento", { p_ano: ano, p_linhas: linhas });
+  if (error) throw error;
+}
+
+// ── Fechamento do mês (v24) ──
+
+// O que falta para fechar o mês (contas sem Fechamento do dia, avisos) e o resumo dos saldos. mes: "AAAA-MM-01".
+export async function conferirFechamentoMes(mes) {
+  const { data, error } = await supabase.rpc("conferir_fechamento_mes", { p_mes: mes });
+  if (error) throw error;
+  return data;
+}
+
+export async function listarFechamentos() {
+  const { data, error } = await supabase.from("fechamentos_mes").select("*").order("mes", { ascending: false }).order("id", { ascending: false }).limit(500);
+  if (error) throw error;
+  return data;
+}
+
+export async function fecharMes(mes, observacao) {
+  const { data, error } = await supabase.rpc("fechar_mes", { p_mes: mes, p_observacao: observacao?.trim() || null });
+  if (error) throw error;
+  return data;
+}
+
+export async function reabrirMes(id, motivo) {
+  const { error } = await supabase.rpc("reabrir_mes", { p_fechamento: id, p_motivo: motivo.trim() });
+  if (error) throw error;
+}
+
 // ── Exportação para o contador (Excel) ──
 // Tudo do período: extrato (todas as contas), pagamentos e recebimentos válidos (com os dados do lançamento),
 // entradas e movimentos não estornados, e os saldos de cada conta antes e no fim do período.
