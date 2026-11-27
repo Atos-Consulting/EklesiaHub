@@ -4,7 +4,7 @@ import Icone from "../Icone";
 import { urlLogo, enviarLogo, validarLogo, atualizarIdentidade, descartarLogo, mensagemErro } from "../db";
 import { PALETAS, COR_PRIMARIA_PADRAO, COR_MENU_PADRAO, avisoCor, aplicarTema } from "../tema";
 
-// Parâmetros → Dados da igreja → Identidade visual (v22): logo (aparece no menu e nos documentos
+// Parâmetros → Layout (v22): logo (aparece no menu e nos documentos
 // impressos) e as cores do sistema. Enquanto escolhe, o sistema já mostra as cores (prévia);
 // sem salvar, ao sair volta ao que estava.
 function Cor({ id, rotulo, valor, onChange, aviso, ajuda }) {
@@ -70,7 +70,7 @@ export default function IdentidadeIgreja({ empresa, onSalvo }) {
 
   return (
     <div>
-      <h3 className="section-title">Identidade visual</h3>
+      <h3 className="section-title">Logo e cores</h3>
       <div className="identidade">
         <div>
           <label style={lbl}>Logo</label>
@@ -106,10 +106,10 @@ export default function IdentidadeIgreja({ empresa, onSalvo }) {
       </div>
 
       <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 12, marginTop: 16, flexWrap: "wrap" }}>
-        {ok && <span className="pill pill-ok">Identidade salva</span>}
+        {ok && <span className="pill pill-ok">Layout salvo</span>}
         {mudou && <button type="button" className="btn btn-ghost" onClick={() => { setF(salvo); setErro(""); }} disabled={salvando}>Desfazer</button>}
         <button type="button" className="btn btn-ghost" onClick={() => { set("pri", COR_PRIMARIA_PADRAO); set("menu", COR_MENU_PADRAO); }} disabled={salvando}>Cores do sistema</button>
-        <button type="button" className="btn btn-primary" onClick={salvar} disabled={salvando || enviando || !mudou || Boolean(avisoPri || avisoMenu)}>{salvando ? "Salvando..." : "Salvar identidade"}</button>
+        <button type="button" className="btn btn-primary" onClick={salvar} disabled={salvando || enviando || !mudou || Boolean(avisoPri || avisoMenu)}>{salvando ? "Salvando..." : "Salvar layout"}</button>
       </div>
       {erro && <div className="alert alert-danger" role="alert" style={{ marginTop: 12 }}><Icone nome="alerta" tamanho={16} /><span>{erro}</span></div>}
     </div>

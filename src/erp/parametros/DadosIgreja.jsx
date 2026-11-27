@@ -6,9 +6,8 @@ import { mascararCnpj, soDigitos } from "../format";
 import { enderecoDe, errosEndereco } from "../endereco";
 import CamposEndereco from "../CamposEndereco";
 import { CabecalhoAba } from "./comum";
-import IdentidadeIgreja from "./IdentidadeIgreja";
 
-// Sistema → Dados da igreja: nome, endereço, contatos e identidade visual (logo e cores, v22).
+// Sistema → Dados da igreja: nome, endereço e contatos. Logo e cores ficam na aba Layout.
 // Razão social e CNPJ são do cadastro da plataforma (tela Igrejas).
 export default function DadosIgreja({ perfil, onIdentidadeMudou }) {
   const [empresa, setEmpresa] = useState(null);
@@ -45,7 +44,7 @@ export default function DadosIgreja({ perfil, onIdentidadeMudou }) {
 
   return (
     <>
-      <CabecalhoAba titulo="Dados da igreja" descricao="Endereço, contatos, logo e cores da igreja. O endereço e a logo aparecem nos documentos e relatórios; a logo e as cores, no sistema. A razão social e o CNPJ são definidos pelo administrador da plataforma." />
+      <CabecalhoAba titulo="Dados da igreja" descricao="Nome, endereço e contatos da igreja, que aparecem nos documentos e relatórios. A logo e as cores ficam em Parâmetros → Layout. A razão social e o CNPJ são definidos pelo administrador da plataforma." />
       <div style={{ padding: "0 24px 24px" }}>
         {!empresa && !erro && <div className="carregando-linha"><div className="spinner" /> Carregando...</div>}
         {empresa && (
@@ -68,7 +67,6 @@ export default function DadosIgreja({ perfil, onIdentidadeMudou }) {
             </div>
           </form>
         )}
-        {empresa && <IdentidadeIgreja empresa={empresa} onSalvo={(x) => onIdentidadeMudou?.(x)} />}
         {erro && <div className="alert alert-danger" role="alert" style={{ marginTop: 16 }}><Icone nome="alerta" tamanho={16} /><span>{erro}</span></div>}
       </div>
     </>

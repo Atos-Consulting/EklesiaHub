@@ -8,6 +8,7 @@ import CentrosCusto from "./CentrosCusto";
 import Orientacoes from "./Orientacoes";
 import NumeroNotas from "./NumeroNotas";
 import DadosIgreja from "./DadosIgreja";
+import Layout from "./Layout";
 import Modulos from "./Modulos";
 
 // Parâmetros da empresa (só o Administrador acessa), organizados por área.
@@ -27,6 +28,7 @@ export const GRUPOS_PARAMETROS = [
   ] },
   { id: "sistema", rotulo: "Sistema", abas: [
     { id: "igreja", rotulo: "Dados da igreja", Tela: DadosIgreja },
+    { id: "layout", rotulo: "Layout", Tela: Layout },
     { id: "modulos", rotulo: "Módulos", Tela: Modulos },
     { id: "campos", rotulo: "Tamanho dos campos", Tela: NumeroNotas },
   ] },
