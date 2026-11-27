@@ -55,13 +55,18 @@ O EklesiaHub hoje é **só um ERP multiempresa de igreja** (o `README.md` ainda 
 
 O gatilho `registrar_log()` (v10) grava em `logs` toda criação, alteração (só os campos que mudaram, com de/para) e exclusão nas tabelas do ERP. Tabela nova do ERP precisa do gatilho `<tabela>_log_trg`. O log é só leitura (Administrador da igreja, em Sistema → Logs). Os itens da nota não são registrados, porque `salvar_nota_entrada` apaga e recria os itens a cada gravação.
 
+### Igreja: dados, logo e cores (v22)
+
+- O cadastro de Igrejas (administrador da plataforma) tem só razão social e CNPJ (mais o administrador inicial e ativa/inativa); ao salvar, mantém o `nome_fantasia` que já estava. Nome usado no sistema, endereço, contatos, logo e cores são da própria igreja, em Parâmetros → Dados da igreja (`atualizar_dados_empresa`, Administrador; campos em `CamposEndereco.jsx`, helpers em `endereco.js`). Não duplique esses campos na tela Igrejas.
+- Identidade visual (Parâmetros → Dados da igreja, `parametros/IdentidadeIgreja.jsx`): logo no bucket **público** `identidade` (PNG/JPG/WebP até 2 MB, pasta `<empresa_id>/`, SVG fica de fora) e as cores principal e do menu (`empresas.logo_caminho`, `cor_primaria`, `cor_menu`), gravadas por `atualizar_identidade_empresa`. `meu_perfil` devolve `empresa_logo`, `cor_primaria` e `cor_menu`; o `ErpApp` aplica as cores com `aplicarTema()` de `tema.js` (deriva hover, soft e bright, e a cor igual à do sistema não sobrescreve nada) e mostra a logo no lugar da cruz (`Marca`). A tela recusa cor sem contraste com texto branco. A logo também sai nos documentos impressos (`CabecalhoIgreja`, Relatório do mês).
+
 ### Parâmetros
 
 O catálogo fica em `src/erp/catalogoParametros.js`. **Não** chame o arquivo de `parametros.js`, que colide com `Parametros.jsx` no Windows. Parâmetro novo precisa de três coisas: regra em `parametros_valida()` no SQL, entrada no catálogo e bloco na tela.
 
 ## Migrations
 
-Arquivos SQL soltos na raiz, rodados **à mão no SQL Editor** em ordem: `schema.sql` → `migration_v2` → `v3` (Kids) → `v4_erp` → `v5_multiempresa` → `v6_parametros_fiscal` → `v7_niveis_usuarios` → `v8_financeiro` → `v9_trocar_empresa` → `v10_cadastro_logs` → `v11_contabilidade_opcional` → `v12_entradas` → `v13_movimentos_caixa` → `v14_contas_receber` → `v15_centro_custo_obrigatorio` → `v16_entradas_usuario` → `v17_centro_custo_itens` → `v18_formas_pagamento` → `v19_conciliacao_caixa` → `v20_contas_fixas` → `v21_pagamento_comprovantes`. Não presuma que a última já foi aplicada no banco real. A UI que depende dela quebra até ser aplicada. Teste migrations novas com dados legados já aprovados, porque os gatilhos de imutabilidade podem barrar o backfill.
+Arquivos SQL soltos na raiz, rodados **à mão no SQL Editor** em ordem: `schema.sql` → `migration_v2` → `v3` (Kids) → `v4_erp` → `v5_multiempresa` → `v6_parametros_fiscal` → `v7_niveis_usuarios` → `v8_financeiro` → `v9_trocar_empresa` → `v10_cadastro_logs` → `v11_contabilidade_opcional` → `v12_entradas` → `v13_movimentos_caixa` → `v14_contas_receber` → `v15_centro_custo_obrigatorio` → `v16_entradas_usuario` → `v17_centro_custo_itens` → `v18_formas_pagamento` → `v19_conciliacao_caixa` → `v20_contas_fixas` → `v21_pagamento_comprovantes` → `v22_identidade_igreja`. Não presuma que a última já foi aplicada no banco real. A UI que depende dela quebra até ser aplicada. Teste migrations novas com dados legados já aprovados, porque os gatilhos de imutabilidade podem barrar o backfill.
 
 ## BMAD
 

@@ -22,7 +22,8 @@ import { ABAS_PARAMETROS } from "./parametros/grupos";
 import Usuarios from "./Usuarios";
 import Empresas from "./Empresas";
 import MinhaConta from "./MinhaConta";
-import { fetchCadastros, listarEmpresasAtivas, trocarEmpresa, mensagemErro } from "./db";
+import { fetchCadastros, listarEmpresasAtivas, trocarEmpresa, mensagemErro, urlLogo } from "./db";
+import { aplicarTema } from "./tema";
 import { permissoes, rotuloNivel } from "./permissoes";
 import { usaContabilidade } from "./catalogoParametros";
 
@@ -102,7 +103,7 @@ function SeletorEmpresa({ perfil, plataforma, onTrocada }) {
 
   const conteudo = (
     <>
-      <Marca />
+      <Marca logo={urlLogo(perfil.empresa_logo)} />
       <div style={{ minWidth: 0 }}>
         <div className="brand-name">EklesiaHub</div>
         <div className="brand-empresa" title={perfil.empresa_nome}>{perfil.empresa_nome}</div>
@@ -139,7 +140,13 @@ function SeletorEmpresa({ perfil, plataforma, onTrocada }) {
   );
 }
 
-export default function ErpApp({ perfil, onSair, onEmpresaTrocada }) {
+export default function ErpApp({ perfil: perfilInicial, onSair, onEmpresaTrocada }) {
+  // Logo, cores e nome da igreja podem mudar em Parâmetros sem recarregar o perfil (v22).
+  const [identidade, setIdentidade] = useState({});
+  const perfil = useMemo(() => ({ ...perfilInicial, ...identidade }), [perfilInicial, identidade]);
+  const mudarIdentidade = useCallback((novo) => setIdentidade((x) => ({ ...x, ...novo })), []);
+  useEffect(() => { aplicarTema(perfil); }, [perfil]);
+  useEffect(() => () => aplicarTema({}), []); // saiu ou trocou de igreja: volta às cores do sistema
   const perm = useMemo(() => permissoes(perfil), [perfil]);
   const [cadastros, setCadastros] = useState(null);
   // Parâmetro da igreja "usar contabilidade": desligado, o módulo Contábil some do menu.
@@ -203,7 +210,7 @@ export default function ErpApp({ perfil, onSair, onEmpresaTrocada }) {
     if (modulo.id === "empresas") return <Empresas perfil={perfil} />;
     if (erro) return <div className="alert alert-danger" role="alert"><Icone nome="alerta" tamanho={16} /><span>{erro}</span></div>;
     if (!cadastros) return <div className="carregando-linha"><div className="spinner" /> Carregando...</div>;
-    if (modulo.id === "parametros") return <Parametros aba={tela?.id} perfil={perfil} cadastros={cadastros} onCadastrosMudaram={recarregarCadastros} />;
+    if (modulo.id === "parametros") return <Parametros aba={tela?.id} perfil={perfil} cadastros={cadastros} onCadastrosMudaram={recarregarCadastros} onIdentidadeMudou={mudarIdentidade} />;
     if (modulo.id === "logs") return <Logs />;
     if (modulo.id === "financeiro") {
       if (tela?.id === "painel") return <PainelFinanceiro cadastros={cadastros} />;

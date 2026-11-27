@@ -140,6 +140,32 @@ export async function atualizarDadosEmpresa(dados) {
   if (error) throw error;
 }
 
+// ── Identidade visual da igreja (v22): logo no bucket público "identidade" e cores ──
+const BUCKET_IDENTIDADE = "identidade";
+export const TIPOS_LOGO = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", webp: "image/webp" };
+export function validarLogo(a) {
+  if (!TIPOS_LOGO[extensaoDe(a.name)]) return "Use uma imagem PNG, JPG ou WebP.";
+  if (a.size > 2 * 1024 * 1024) return "A imagem passa de 2 MB.";
+  return "";
+}
+export const urlLogo = (caminho) => (caminho ? supabase.storage.from(BUCKET_IDENTIDADE).getPublicUrl(caminho).data.publicUrl : null);
+export async function enviarLogo(empresaId, arquivo) {
+  const inv = validarLogo(arquivo);
+  if (inv) throw new Error(inv);
+  const ext = extensaoDe(arquivo.name) === "jpeg" ? "jpg" : extensaoDe(arquivo.name);
+  const caminho = `${empresaId}/logo-${crypto.randomUUID()}.${ext}`;
+  const { error } = await supabase.storage.from(BUCKET_IDENTIDADE).upload(caminho, arquivo, { contentType: TIPOS_LOGO[extensaoDe(arquivo.name)], upsert: false, cacheControl: "31536000" });
+  if (error) throw error;
+  return caminho;
+}
+// Grava logo e cores; a logo antiga (se trocou) sai do Storage depois.
+export async function atualizarIdentidade({ logo, corPrimaria, corMenu }, logoAntiga) {
+  const { error } = await supabase.rpc("atualizar_identidade_empresa", { p_logo: logo || null, p_cor_primaria: corPrimaria || null, p_cor_menu: corMenu || null });
+  if (error) throw error;
+  if (logoAntiga && logoAntiga !== logo) await supabase.storage.from(BUCKET_IDENTIDADE).remove([logoAntiga]);
+}
+export async function descartarLogo(caminho) { if (caminho) await supabase.storage.from(BUCKET_IDENTIDADE).remove([caminho]); }
+
 // Log de criação/alteração/exclusão da igreja atual (só o Administrador lê).
 export async function listarLogs({ de, ate }) {
   let consulta = supabase.from("logs").select("*").order("criado_em", { ascending: false }).order("id", { ascending: false }).limit(1000);

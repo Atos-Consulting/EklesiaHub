@@ -1,5 +1,6 @@
 import { formatarMoeda, formatarData, hojeISO, mascararDocumento, mascararCnpj, valorPorExtenso, deCentavos } from "./format";
 import { TIPOS_ENTRADA } from "./financeiro";
+import { urlLogo } from "./db";
 
 // Documentos impressos de Dízimos e ofertas: comprovante de uma entrada e informe anual de contribuições.
 // Só exibem dados (sem regra de negócio); a impressão é feita por <Impressao>.
@@ -18,6 +19,7 @@ export function CabecalhoIgreja({ empresa, nomeIgreja, titulo, subtitulo }) {
   const nome = empresa?.nome_fantasia || empresa?.razao_social || nomeIgreja;
   return (
     <header className="doc-cabecalho">
+      {empresa?.logo_caminho && <img className="doc-logo" src={urlLogo(empresa.logo_caminho)} alt="" />}
       <div className="doc-igreja">{nome}</div>
       {empresa?.razao_social && empresa.razao_social !== nome && <div className="doc-linha">{empresa.razao_social}</div>}
       <div className="doc-linha">

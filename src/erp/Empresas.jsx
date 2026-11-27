@@ -17,7 +17,7 @@ const COLUNAS = {
 function EmpresaModal({ inicial, ehMinha, onSalvo, onFechar }) {
   const novo = !inicial;
   const [form, setForm] = useState(() => ({
-    razaoSocial: inicial?.razao_social || "", nomeFantasia: inicial?.nome_fantasia || "",
+    razaoSocial: inicial?.razao_social || "",
     cnpj: inicial?.cnpj ? mascararCnpj(inicial.cnpj) : "", ativo: inicial?.ativo ?? true,
     adminNome: "", adminEmail: "", adminSenha: "",
   }));
@@ -43,7 +43,9 @@ function EmpresaModal({ inicial, ehMinha, onSalvo, onFechar }) {
     if (Object.values(erros).some(Boolean)) return;
     setSalvando(true);
     try {
-      const dados = { razaoSocial: form.razaoSocial.trim(), nomeFantasia: form.nomeFantasia.trim(), cnpj: limparCnpj(form.cnpj) };
+      // Aqui só razão social e CNPJ. Nome no sistema, endereço, contatos, logo e cores ficam com a própria
+      // igreja (Parâmetros → Dados da igreja); o nome fantasia já gravado é mantido.
+      const dados = { razaoSocial: form.razaoSocial.trim(), nomeFantasia: inicial?.nome_fantasia ?? "", cnpj: limparCnpj(form.cnpj) };
       if (novo) await criarEmpresa({ ...dados, adminNome: form.adminNome.trim(), adminEmail: form.adminEmail.trim(), adminSenha: form.adminSenha });
       else await atualizarEmpresa(inicial.id, { ...dados, ativo: form.ativo });
       onSalvo();
@@ -54,28 +56,22 @@ function EmpresaModal({ inicial, ehMinha, onSalvo, onFechar }) {
   }
 
   return (
-    <Modal titulo={novo ? "Nova igreja" : "Editar igreja"} largura={600} onFechar={onFechar} fecharFora={false}
+    <Modal titulo={novo ? "Nova igreja" : "Editar igreja"} largura={560} onFechar={onFechar} fecharFora={false}
       rodape={<>
         <button className="btn btn-ghost" onClick={onFechar} disabled={salvando}>Cancelar</button>
         <button className="btn btn-primary" onClick={salvar} disabled={salvando}>{salvando ? "Salvando..." : novo ? "Criar igreja" : "Salvar"}</button>
       </>}>
       <h3 className="section-title" style={{ marginTop: 14 }}>Dados da igreja</h3>
-      <label style={{ ...lbl, marginTop: 0 }} htmlFor="e-razao">Razão social *</label>
+      <label style={{ ...lbl, marginTop: 0 }} htmlFor="e-razao">Nome da igreja (razão social) *</label>
       <input id="e-razao" style={{ ...inp, ...borda("razaoSocial") }} value={form.razaoSocial} onChange={campo("razaoSocial")} autoFocus />
       {msg("razaoSocial")}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "0 12px" }}>
-        <div>
-          <label style={lbl} htmlFor="e-fantasia">Nome fantasia</label>
-          <input id="e-fantasia" style={inp} value={form.nomeFantasia} onChange={campo("nomeFantasia")} />
-          <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>Aparece no menu do sistema.</div>
-        </div>
-        <div>
-          <label style={lbl} htmlFor="e-cnpj">CNPJ</label>
-          <input id="e-cnpj" style={{ ...inp, ...borda("cnpj") }} placeholder="00.000.000/0000-00" value={form.cnpj}
-            onChange={(e) => setForm((p) => ({ ...p, cnpj: mascararCnpj(e.target.value) }))} />
-          {msg("cnpj")}
-        </div>
+      <div style={{ maxWidth: 260 }}>
+        <label style={lbl} htmlFor="e-cnpj">CNPJ</label>
+        <input id="e-cnpj" style={{ ...inp, ...borda("cnpj") }} placeholder="00.000.000/0000-00" value={form.cnpj}
+          onChange={(e) => setForm((p) => ({ ...p, cnpj: mascararCnpj(e.target.value) }))} />
+        {msg("cnpj")}
       </div>
+      <div className="muted" style={{ fontSize: 12.5, marginTop: 8 }}>Nome usado no sistema, endereço, contatos, logo e cores são preenchidos pela própria igreja em Parâmetros → Dados da igreja.</div>
 
       {novo ? (
         <>

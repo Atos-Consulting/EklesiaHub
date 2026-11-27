@@ -1,7 +1,7 @@
 import { Header } from "../ui";
 import { GRUPOS_PARAMETROS, ABAS_PARAMETROS } from "./parametros/grupos";
 
-export default function Parametros({ aba, perfil, cadastros, onCadastrosMudaram }) {
+export default function Parametros({ aba, perfil, cadastros, onCadastrosMudaram, onIdentidadeMudou }) {
   const atual = ABAS_PARAMETROS.find((a) => a.id === aba) ?? ABAS_PARAMETROS[0];
   const { Tela } = GRUPOS_PARAMETROS.flatMap((g) => g.abas).find((a) => a.id === atual.id);
 
@@ -23,7 +23,7 @@ export default function Parametros({ aba, perfil, cadastros, onCadastrosMudaram 
           ))}
         </nav>
         <div className="card param-conteudo">
-          <Tela key={atual.id} perfil={perfil} cadastros={cadastros} onCadastrosMudaram={onCadastrosMudaram} />
+          <Tela key={atual.id} perfil={perfil} cadastros={cadastros} onCadastrosMudaram={onCadastrosMudaram} onIdentidadeMudou={onIdentidadeMudou} />
         </div>
       </div>
     </div>

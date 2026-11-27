@@ -4,6 +4,7 @@ import { inp } from "../estilos";
 import Icone from "./Icone";
 import { carregarRelatorioMes, mensagemErro } from "./db";
 import { exportarParaContador } from "./exportarContador";
+import { urlLogo } from "./db";
 import { formatarMoeda, formatarData, hojeISO, paraCentavos, deCentavos } from "./format";
 import { ORIGENS_EXTRATO, somarDias, somarMeses } from "./financeiro";
 
@@ -232,7 +233,8 @@ export default function RelatorioMes({ cadastros, perfil }) {
       {rel && (
         <article className="card relatorio-folha">
           <header className="rel-cabecalho">
-            <div>
+            {perfil?.empresa_logo && <img className="rel-logo" src={urlLogo(perfil.empresa_logo)} alt="" />}
+            <div style={{ flex: 1, minWidth: 0 }}>
               <div className="rel-igreja">{perfil?.empresa_nome}</div>
               <h2 className="rel-titulo">Prestação de contas — {nomeMes(mes)}</h2>
               <div className="rel-sub">Período de {formatarData(periodo.de)} a {formatarData(periodo.ate)}{emAndamento ? " (mês em andamento)" : ""}</div>
