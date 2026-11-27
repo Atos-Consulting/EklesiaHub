@@ -11,6 +11,7 @@ import RelatorioMes from "./RelatorioMes";
 import AbasTela from "./AbasTela";
 import Conciliacao from "./Conciliacao";
 import ContasFixas from "./ContasFixas";
+import PainelFinanceiro from "./PainelFinanceiro";
 import InformeAnual from "./InformeAnual";
 import Logs from "./Logs";
 import Fornecedores from "./Fornecedores";
@@ -34,7 +35,7 @@ const MODULOS = [
     telas: [{ id: "notas", rotulo: "Notas de entrada" }, { id: "fornecedores", rotulo: "Fornecedores" }, { id: "importar", rotulo: "Importar XML" }] },
   // Contas a pagar e a receber (mesma tela, por aba de situação), entradas (dízimos, ofertas, campanhas) e caixa (extrato e movimentos).
   { id: "financeiro", grupo: "Gestão", rotulo: "Financeiro", icone: "carteira", pronto: true,
-    telas: [{ id: "lancamentos", rotulo: "Lançamentos" }, { id: "entradas", rotulo: "Dízimos e ofertas" }, { id: "caixa", rotulo: "Caixa" }] },
+    telas: [{ id: "painel", rotulo: "Painel" }, { id: "lancamentos", rotulo: "Lançamentos" }, { id: "entradas", rotulo: "Dízimos e ofertas" }, { id: "caixa", rotulo: "Caixa" }] },
   { id: "contabil", grupo: "Gestão", rotulo: "Contábil", icone: "calculadora", pronto: false, contabil: true,
     descricao: "Escrituração contábil integrada aos demais módulos.",
     previsto: ["Plano de contas editável", "Lançamentos em partidas dobradas", "Razão e balancete", "DRE e balanço patrimonial", "Contabilização automática das notas aprovadas"] },
@@ -50,10 +51,10 @@ const MODULOS = [
 
 // Rota por URL (#/modulo/tela): botão voltar, atualizar a página e links diretos funcionam.
 function lerRota() {
-  const [, modulo = "", tela = "", aba = ""] = window.location.hash.replace(/^#/, "").split("/");
-  if (modulo === "financeiro" && tela === "contas") return { modulo, tela: "lancamentos", aba }; // nome anterior da tela
+  const [, modulo = "", tela = "", aba = "", filtro = ""] = window.location.hash.replace(/^#/, "").split("/");
+  if (modulo === "financeiro" && tela === "contas") return { modulo, tela: "lancamentos", aba, filtro }; // nome anterior da tela
   const antiga = modulo === "financeiro" && ROTAS_ANTIGAS_FINANCEIRO[tela];
-  return antiga ? { modulo, tela: antiga[0], aba: antiga[1] } : { modulo, tela, aba };
+  return antiga ? { modulo, tela: antiga[0], aba: antiga[1], filtro: "" } : { modulo, tela, aba, filtro };
 }
 
 // Financeiro (reorganizado de 5 para 3 telas): endereços antigos continuam abrindo a aba certa.
@@ -204,6 +205,7 @@ export default function ErpApp({ perfil, onSair, onEmpresaTrocada }) {
     if (modulo.id === "parametros") return <Parametros aba={tela?.id} perfil={perfil} cadastros={cadastros} onCadastrosMudaram={recarregarCadastros} />;
     if (modulo.id === "logs") return <Logs />;
     if (modulo.id === "financeiro") {
+      if (tela?.id === "painel") return <PainelFinanceiro cadastros={cadastros} />;
       if (tela?.id === "entradas") {
         const abaEnt = rota.aba === "informe" ? "informe" : "lista";
         return (
@@ -233,7 +235,7 @@ export default function ErpApp({ perfil, onSair, onEmpresaTrocada }) {
           <AbasTela base="#/financeiro/lancamentos" abas={ABAS_CONTAS} atual={abaLanc} rotulo="Lançamentos" />
           {abaLanc === "fixas"
             ? <ContasFixas cadastros={cadastros} podeEditar={perm.pagar} onCadastrosMudaram={recarregarCadastros} />
-            : <ContasPagar key={abaLanc} natureza={abaLanc} cadastros={cadastros} podePagar={perm.pagar} onCadastrosMudaram={recarregarCadastros} />}
+            : <ContasPagar key={`${abaLanc}|${rota.filtro}`} natureza={abaLanc} situacaoInicial={rota.filtro} cadastros={cadastros} podePagar={perm.pagar} onCadastrosMudaram={recarregarCadastros} />}
         </>
       );
     }

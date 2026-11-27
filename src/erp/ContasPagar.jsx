@@ -43,7 +43,7 @@ const COLUNAS = {
   pagamento: (t) => t.data_pagamento,
 };
 
-function Indicador({ icone, tom = "", rotulo, valor, sub }) {
+export function Indicador({ icone, tom = "", rotulo, valor, sub }) {
   return (
     <div className="card stat">
       <div>
@@ -56,13 +56,13 @@ function Indicador({ icone, tom = "", rotulo, valor, sub }) {
   );
 }
 
-export default function ContasPagar({ natureza = "pagar", cadastros, podePagar, onCadastrosMudaram }) {
+export default function ContasPagar({ natureza = "pagar", situacaoInicial, cadastros, podePagar, onCadastrosMudaram }) {
   const T = TEXTOS[natureza];
   const receber = natureza === "receber";
   const [titulos, setTitulos] = useState(null);
   const [erro, setErro] = useState("");
   const [filtros, setFiltros] = useState(FILTROS_VAZIOS);
-  const [situacao, setSituacao] = useState("abertos");
+  const [situacao, setSituacao] = useState(SITUACOES.some((x) => x.id === situacaoInicial) ? situacaoInicial : "abertos"); // vem do Painel: #/financeiro/lancamentos/pagar/vencido
   const [acao, setAcao] = useState(null); // { tipo: "pagar" | "estornar" | "ver" | "nova" | "cancelar", titulo }
   const hoje = hojeISO();
   const emSete = somarDias(hoje, 7);

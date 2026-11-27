@@ -481,6 +481,26 @@ export async function desfazerConciliacao(id, motivo) {
   if (error) throw error;
 }
 
+// Painel do Financeiro: títulos em aberto (pagar e receber), extrato desde o 1º dia do mês anterior,
+// até onde cada conta foi conciliada e quantas notas estão em rascunho. Só lê (gera antes os meses das contas fixas).
+export async function carregarPainel(contaIds, { deAnt, ate }) {
+  await gerarContasFixas().catch(() => 0);
+  const colunas = "id, descricao, fornecedor_nome, vencimento, valor, parcela, total_parcelas, conta_fixa_id";
+  const [pagar, receber, linhas, rascunhos, ...conciliadas] = await Promise.all([
+    supabase.from("titulos_pagar").select(colunas).eq("status", "aberto").order("vencimento").limit(5000),
+    supabase.from("titulos_receber").select(colunas).eq("status", "aberto").order("vencimento").limit(5000),
+    supabase.from("extrato_caixa").select("conta_caixa_id, data, origem, subtipo, valor").gte("data", deAnt).lte("data", ate).limit(20000),
+    supabase.from("documentos_entrada").select("id", { count: "exact", head: true }).eq("status", "rascunho"),
+    ...contaIds.map((id) => supabase.rpc("conciliado_ate", { p_conta: id })),
+  ]);
+  const erro = [pagar, receber, linhas, rascunhos, ...conciliadas].find((r) => r.error)?.error;
+  if (erro) throw erro;
+  return {
+    pagar: pagar.data, receber: receber.data, linhas: linhas.data, rascunhos: rascunhos.count ?? 0,
+    conciliadoAte: Object.fromEntries(contaIds.map((id, i) => [id, conciliadas[i].data ?? null])),
+  };
+}
+
 // Fluxo de caixa: realizado (extrato), saldo de cada conta antes do período e os títulos em aberto (previsto).
 // contaIds: as contas consideradas (todas, ou uma só).
 export async function carregarFluxo(contaIds, { de, ate }) {
