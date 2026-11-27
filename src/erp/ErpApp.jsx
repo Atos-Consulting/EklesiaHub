@@ -15,6 +15,8 @@ import ContasFixas from "./ContasFixas";
 import PainelFinanceiro from "./PainelFinanceiro";
 import Orcamento from "./Orcamento";
 import FechamentoMes from "./FechamentoMes";
+import Diario from "./contabil/Diario";
+import { Razao, Balancete, Dre, Balanco } from "./contabil/Relatorios";
 import InformeAnual from "./InformeAnual";
 import Logs from "./Logs";
 import Fornecedores from "./Fornecedores";
@@ -40,9 +42,8 @@ const MODULOS = [
   // Contas a pagar e a receber (mesma tela, por aba de situação), entradas (dízimos, ofertas, campanhas) e caixa (extrato e movimentos).
   { id: "financeiro", grupo: "Gestão", rotulo: "Financeiro", icone: "carteira", pronto: true,
     telas: [{ id: "painel", rotulo: "Painel" }, { id: "lancamentos", rotulo: "Lançamentos" }, { id: "entradas", rotulo: "Dízimos e ofertas" }, { id: "caixa", rotulo: "Caixa" }, { id: "orcamento", rotulo: "Orçamento" }] },
-  { id: "contabil", grupo: "Gestão", rotulo: "Contábil", icone: "calculadora", pronto: false, contabil: true,
-    descricao: "Escrituração contábil integrada aos demais módulos.",
-    previsto: ["Plano de contas editável", "Lançamentos em partidas dobradas", "Razão e balancete", "DRE e balanço patrimonial", "Contabilização automática das notas aprovadas"] },
+  { id: "contabil", grupo: "Gestão", rotulo: "Contábil", icone: "calculadora", pronto: true, contabil: true,
+    telas: [{ id: "lancamentos", rotulo: "Lançamentos" }, { id: "razao", rotulo: "Razão" }, { id: "balancete", rotulo: "Balancete" }, { id: "dre", rotulo: "DRE" }, { id: "balanco", rotulo: "Balanço" }] },
   { id: "comercial", grupo: "Gestão", rotulo: "Comercial", icone: "sacola", pronto: false,
     descricao: "Livraria, bazar e demais vendas.",
     previsto: ["Produtos e controle de estoque", "Vendas e ponto de venda (PDV)", "Compras via notas de entrada", "Custo das mercadorias vendidas"] },
@@ -168,7 +169,7 @@ export default function ErpApp({ perfil: perfilInicial, onSair, onEmpresaTrocada
 
   const modulo = visiveis.find((m) => m.id === rota.modulo) || visiveis.find((m) => m.pronto) || visiveis[0];
   const tela = modulo?.telas?.find((t) => t.id === rota.tela) || modulo?.telas?.[0];
-  const precisaCadastros = ["administrativo", "financeiro", "parametros", "logs"].includes(modulo?.id);
+  const precisaCadastros = ["administrativo", "financeiro", "contabil", "parametros", "logs"].includes(modulo?.id);
 
   useEffect(() => {
     document.title = `${[tela?.rotulo, modulo?.rotulo].filter(Boolean).join(" · ") || "ERP"} — EklesiaHub`;
@@ -214,6 +215,14 @@ export default function ErpApp({ perfil: perfilInicial, onSair, onEmpresaTrocada
     if (!cadastros) return <div className="carregando-linha"><div className="spinner" /> Carregando...</div>;
     if (modulo.id === "parametros") return <Parametros aba={tela?.id} perfil={perfil} cadastros={cadastros} onCadastrosMudaram={recarregarCadastros} onIdentidadeMudou={mudarIdentidade} />;
     if (modulo.id === "logs") return <Logs />;
+    if (modulo.id === "contabil") {
+      const p = { cadastros, perfil, podeConfigurar: perm.administrar };
+      if (tela?.id === "razao") return <Razao {...p} />;
+      if (tela?.id === "balancete") return <Balancete {...p} />;
+      if (tela?.id === "dre") return <Dre {...p} />;
+      if (tela?.id === "balanco") return <Balanco {...p} />;
+      return <Diario {...p} podeLancar={perm.pagar} />;
+    }
     if (modulo.id === "financeiro") {
       if (tela?.id === "painel") return <PainelFinanceiro cadastros={cadastros} />;
       if (tela?.id === "orcamento") return <Orcamento cadastros={cadastros} podeEditar={perm.administrar} />;

@@ -481,6 +481,16 @@ input:disabled, select:disabled, textarea:disabled {
 .painel-pendencias li { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--warn-text); }
 .painel-pendencias a { color: inherit; }
 
+/* Contabilidade (v25) */
+.ctb-balanco { display: grid; grid-template-columns: 1fr 1fr; gap: 0 28px; align-items: start; }
+@media (max-width: 860px) { .ctb-balanco { grid-template-columns: 1fr; } }
+@media print { .ctb-balanco { grid-template-columns: 1fr 1fr; } }
+.ctb-balancete td { white-space: nowrap; }
+.ctb-balancete td:first-child { white-space: normal; }
+.regras-grade { display: flex; flex-direction: column; gap: 10px; margin-bottom: 8px; }
+.regra-linha { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(240px, 380px); gap: 8px 16px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); }
+@media (max-width: 720px) { .regra-linha { grid-template-columns: 1fr; } }
+
 /* Fechamento do mês (v24) */
 .fm-lista { list-style: none; margin: 0 0 14px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .fm-item { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); font-size: 13.5px; }

@@ -773,6 +773,60 @@ export async function reabrirMes(id, motivo) {
   if (error) throw error;
 }
 
+// ── Contabilidade (v25) ──
+
+// Gera no diário o que falta (eventos do sistema) e estorna o que deixou de valer. Devolve quantos entraram.
+export async function contabilizar() {
+  const { data, error } = await supabase.rpc("contabilizar");
+  if (error) throw error;
+  return data;
+}
+
+export async function listarPendenciasContabeis() {
+  const { data, error } = await supabase.rpc("pendencias_contabeis");
+  if (error) throw error;
+  return data;
+}
+
+// Partidas do período (uma linha por partida, com o lançamento). Filtros opcionais: conta, centro.
+export async function listarRazao({ de, ate, contaId, centroId }) {
+  return todasAsPaginas(() => {
+    let c = supabase.from("razao_contabil").select("*").gte("data", de).lte("data", ate);
+    if (contaId) c = c.eq("conta_id", contaId);
+    if (centroId) c = c.eq("centro_custo_id", centroId);
+    return c.order("data").order("lancamento_id").order("partida_id");
+  });
+}
+
+export async function carregarBalancete(de, ate, centroId = null) {
+  const { data, error } = await supabase.rpc("balancete", { p_de: de, p_ate: ate, p_centro: centroId });
+  if (error) throw error;
+  return data;
+}
+
+// partidas: [{ conta_id, centro_custo_id, debito, credito }]
+export async function lancarContabil(data, historico, partidas) {
+  const { data: id, error } = await supabase.rpc("lancar_contabil", { p_data: data, p_historico: historico, p_partidas: partidas });
+  if (error) throw error;
+  return id;
+}
+
+export async function estornarLancamento(id, motivo) {
+  const { error } = await supabase.rpc("estornar_lancamento", { p_lancamento: id, p_motivo: motivo.trim() });
+  if (error) throw error;
+}
+
+export async function listarRegrasContabeis() {
+  const { data, error } = await supabase.from("regras_contabeis").select("chave, conta_id, atualizado_em");
+  if (error) throw error;
+  return data;
+}
+
+export async function salvarRegraContabil(chave, contaId) {
+  const { error } = await supabase.from("regras_contabeis").upsert({ chave, conta_id: contaId }, { onConflict: "empresa_id,chave" });
+  if (error) throw error;
+}
+
 // ── Exportação para o contador (Excel) ──
 // Tudo do período: extrato (todas as contas), pagamentos e recebimentos válidos (com os dados do lançamento),
 // entradas e movimentos não estornados, e os saldos de cada conta antes e no fim do período.

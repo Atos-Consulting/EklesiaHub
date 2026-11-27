@@ -5,6 +5,7 @@ import FormasPagamento from "./FormasPagamento";
 import PlanoContas from "./PlanoContas";
 import TiposContabeis from "./TiposContabeis";
 import CentrosCusto from "./CentrosCusto";
+import RegrasContabeis from "./RegrasContabeis";
 import Orientacoes from "./Orientacoes";
 import NumeroNotas from "./NumeroNotas";
 import DadosIgreja from "./DadosIgreja";
@@ -24,6 +25,7 @@ export const GRUPOS_PARAMETROS = [
     { id: "contas", rotulo: "Plano de contas", Tela: PlanoContas },
     { id: "tipos", rotulo: "Tipos contábeis", Tela: TiposContabeis },
     { id: "centros", rotulo: "Centros de custo", Tela: CentrosCusto },
+    { id: "regras", rotulo: "Regras de contabilização", Tela: RegrasContabeis },
     { id: "orientacoes", rotulo: "Orientações contábeis", Tela: Orientacoes },
   ] },
   { id: "sistema", rotulo: "Sistema", abas: [
