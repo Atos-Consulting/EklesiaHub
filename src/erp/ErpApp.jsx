@@ -10,6 +10,7 @@ import FluxoCaixa from "./FluxoCaixa";
 import RelatorioMes from "./RelatorioMes";
 import AbasTela from "./AbasTela";
 import Conciliacao from "./Conciliacao";
+import ImportarOfx from "./ImportarOfx";
 import ContasFixas from "./ContasFixas";
 import PainelFinanceiro from "./PainelFinanceiro";
 import InformeAnual from "./InformeAnual";
@@ -61,7 +62,7 @@ function lerRota() {
 const ROTAS_ANTIGAS_FINANCEIRO = { pagar: ["lancamentos", "pagar"], receber: ["lancamentos", "receber"], fluxo: ["caixa", "fluxo"], relatorio: ["caixa", "relatorio"] };
 const ABAS_ENTRADAS = [{ id: "lista", rotulo: "Entradas" }, { id: "informe", rotulo: "Informe anual" }];
 const ABAS_CONTAS = [{ id: "pagar", rotulo: "A pagar" }, { id: "receber", rotulo: "A receber" }, { id: "fixas", rotulo: "Contas fixas" }];
-const ABAS_CAIXA = [{ id: "extrato", rotulo: "Extrato de Caixa" }, { id: "conciliacao", rotulo: "Conciliação" }, { id: "fluxo", rotulo: "Fluxo de caixa" }, { id: "relatorio", rotulo: "Relatório do mês" }];
+const ABAS_CAIXA = [{ id: "extrato", rotulo: "Extrato de Caixa" }, { id: "conciliacao", rotulo: "Fechamento do dia" }, { id: "ofx", rotulo: "Extrato do banco (OFX)" }, { id: "fluxo", rotulo: "Fluxo de caixa" }, { id: "relatorio", rotulo: "Relatório do mês" }];
 
 const iniciais = (nome) => {
   const partes = (nome || "?").trim().split(/\s+/);
@@ -223,6 +224,7 @@ export default function ErpApp({ perfil, onSair, onEmpresaTrocada }) {
           <>
             <AbasTela base="#/financeiro/caixa" abas={ABAS_CAIXA} atual={aba} rotulo="Visões do caixa" />
             {aba === "conciliacao" && <Conciliacao cadastros={cadastros} podeConciliar={perm.pagar} podeDesfazer={perm.administrar} />}
+            {aba === "ofx" && <ImportarOfx cadastros={cadastros} podeRegistrar={perm.pagar} onCadastrosMudaram={recarregarCadastros} />}
             {aba === "fluxo" && <FluxoCaixa cadastros={cadastros} />}
             {aba === "relatorio" && <RelatorioMes cadastros={cadastros} perfil={perfil} />}
             {aba === "extrato" && <MovimentosCaixa cadastros={cadastros} podeRegistrar={perm.pagar} onCadastrosMudaram={recarregarCadastros} />}

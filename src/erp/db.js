@@ -19,6 +19,8 @@ export function mensagemErro(e) {
   if (msg.includes("pagamentos_ativo_uq")) return "Este título já foi pago.";
   if (msg.includes("formas_pagamento_empresa_nome_uq")) return "Já existe uma forma de pagamento com este nome.";
   if (/(condicoes_pagamento|titulos_financeiros|entradas)_forma_fk/.test(msg)) return "Esta forma de pagamento já foi usada e não pode ser excluída. Desative-a.";
+  if (msg.includes("comprovantes_tipo_mime_check")) return "Comprovante deve ser PDF, PNG ou JPG.";
+  if (msg.includes("comprovantes_tamanho_check")) return "O comprovante passa de 10 MB.";
   if (msg.includes("conciliacoes_caixa_ativa_uq")) return "Este dia já está conciliado nesta conta.";
   if (msg.includes("contas_fixas_centro_ck")) return "Conta fixa a pagar precisa de centro de custo.";
   if (msg.includes("contas_fixas_periodo_ck")) return "O mês final não pode ser antes do mês inicial.";
@@ -470,8 +472,11 @@ export async function saldoCaixaAte(contaId, data) {
   return Number(saldo ?? 0);
 }
 
-export async function conciliarCaixa(contaId, data, saldo, observacao) {
-  const { data: id, error } = await supabase.rpc("conciliar_caixa", { p_conta: contaId, p_data: data, p_saldo: saldo, p_observacao: observacao?.trim() || null });
+// contagem (fechamento do dia, v21): { "200": 3, "0.50": 4, ... } ou null; com contagem, saldo = soma contada.
+export async function conciliarCaixa(contaId, data, saldo, observacao, contagem = null) {
+  const args = { p_conta: contaId, p_data: data, p_saldo: saldo, p_observacao: observacao?.trim() || null };
+  if (contagem && Object.keys(contagem).length) args.p_contagem = contagem;
+  const { data: id, error } = await supabase.rpc("conciliar_caixa", args);
   if (error) throw error;
   return id;
 }
@@ -637,4 +642,92 @@ export async function urlAnexo(caminho) {
   const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(caminho, 60);
   if (error) throw error;
   return data.signedUrl;
+}
+
+// ── Comprovantes de pagamentos e movimentos (v21) ──
+// Arquivo no bucket "comprovantes", na pasta da igreja (<empresa_id>/<uuid>-<nome>); a linha em comprovantes
+// liga ao pagamento ou ao movimento. Remover: primeiro a linha, depois o arquivo.
+const BUCKET_COMPROVANTES = "comprovantes";
+export const TIPOS_COMPROVANTE = { pdf: "application/pdf", png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg" };
+
+export async function listarComprovantes({ pagamentoId, movimentoId }) {
+  let c = supabase.from("comprovantes").select("*").order("id");
+  c = pagamentoId ? c.eq("pagamento_id", pagamentoId) : c.eq("movimento_id", movimentoId);
+  const { data, error } = await c;
+  if (error) throw error;
+  return data;
+}
+
+export function validarComprovante(arquivo) {
+  if (!TIPOS_COMPROVANTE[extensaoDe(arquivo.name)]) return `"${arquivo.name}": use PDF, PNG ou JPG.`;
+  if (arquivo.size > 10 * 1024 * 1024) return `"${arquivo.name}" passa de 10 MB.`;
+  if (arquivo.size === 0) return `"${arquivo.name}" está vazio.`;
+  return "";
+}
+
+export async function enviarComprovante({ pagamentoId, movimentoId }, arquivo) {
+  const invalido = validarComprovante(arquivo);
+  if (invalido) throw new Error(invalido);
+  const { data: perfil, error: e0 } = await supabase.rpc("meu_perfil");
+  if (e0) throw e0;
+  const caminho = `${perfil.empresa_id}/${crypto.randomUUID()}-${nomeSeguro(arquivo.name)}`;
+  const tipoMime = TIPOS_COMPROVANTE[extensaoDe(arquivo.name)];
+  const { error: e1 } = await supabase.storage.from(BUCKET_COMPROVANTES).upload(caminho, arquivo, { contentType: tipoMime, upsert: false });
+  if (e1) throw e1;
+  const { data, error: e2 } = await supabase.from("comprovantes")
+    .insert({ pagamento_id: pagamentoId ?? null, movimento_id: movimentoId ?? null, caminho, nome_arquivo: arquivo.name.slice(-200), tipo_mime: tipoMime, tamanho: arquivo.size })
+    .select().single();
+  if (e2) {
+    await supabase.storage.from(BUCKET_COMPROVANTES).remove([caminho]);
+    throw e2;
+  }
+  return data;
+}
+
+export async function removerComprovante(c) {
+  const { error } = await supabase.from("comprovantes").delete().eq("id", c.id).select("id").single();
+  if (error) throw error;
+  await supabase.storage.from(BUCKET_COMPROVANTES).remove([c.caminho]);
+}
+
+export async function urlComprovante(caminho, baixar = false) {
+  const { data, error } = await supabase.storage.from(BUCKET_COMPROVANTES).createSignedUrl(caminho, 120, baixar ? { download: true } : undefined);
+  if (error) throw error;
+  return data.signedUrl;
+}
+
+// ── Exportação para o contador (Excel) ──
+// Tudo do período: extrato (todas as contas), pagamentos e recebimentos válidos (com os dados do lançamento),
+// entradas e movimentos não estornados, e os saldos de cada conta antes e no fim do período.
+async function todasAsPaginas(montar) {
+  const linhas = [];
+  for (let pagina = 0; ; pagina++) {
+    const { data, error } = await montar().range(pagina * 1000, pagina * 1000 + 999);
+    if (error) throw error;
+    linhas.push(...data);
+    if (data.length < 1000) return linhas;
+  }
+}
+export async function carregarExportacao(contaIds, { de, ate }) {
+  const antes = new Date(`${de}T12:00:00Z`);
+  antes.setUTCDate(antes.getUTCDate() - 1);
+  const diaAntes = antes.toISOString().slice(0, 10);
+  const [extrato, pagos, recebidos, entradas, movimentos, saldos] = await Promise.all([
+    todasAsPaginas(() => supabase.from("extrato_caixa").select("*").gte("data", de).lte("data", ate).order("conta_caixa_id").order("data").order("criado_em").order("ref_id")),
+    todasAsPaginas(() => supabase.from("titulos_pagar").select("*").not("pagamento_id", "is", null).gte("data_pagamento", de).lte("data_pagamento", ate).order("data_pagamento").order("id")),
+    todasAsPaginas(() => supabase.from("titulos_receber").select("*").not("pagamento_id", "is", null).gte("data_pagamento", de).lte("data_pagamento", ate).order("data_pagamento").order("id")),
+    todasAsPaginas(() => supabase.from("entradas_lista").select("*").eq("estornado", false).gte("data", de).lte("data", ate).order("data").order("id")),
+    todasAsPaginas(() => supabase.from("movimentos_caixa_lista").select("*").eq("estornado", false).gte("data", de).lte("data", ate).order("data").order("id")),
+    Promise.all(contaIds.map(async (id) => {
+      const [a, f, c] = await Promise.all([
+        supabase.rpc("saldo_caixa_ate", { p_conta: id, p_data: diaAntes }),
+        supabase.rpc("saldo_caixa_ate", { p_conta: id, p_data: ate }),
+        supabase.rpc("conciliado_ate", { p_conta: id }),
+      ]);
+      const erro = [a, f, c].find((r) => r.error)?.error;
+      if (erro) throw erro;
+      return { conta_caixa_id: id, anterior: Number(a.data ?? 0), final: Number(f.data ?? 0), fechadaAte: c.data ?? null };
+    })),
+  ]);
+  return { extrato: extrato.map((l) => ({ ...l, valor: Number(l.valor) })), pagos, recebidos, entradas, movimentos, saldos };
 }

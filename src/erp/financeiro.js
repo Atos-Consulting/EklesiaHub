@@ -105,3 +105,42 @@ export function situacaoTitulo(t, hoje, natureza = "pagar") {
   if (t.vencimento === hoje) return { id: "hoje", rotulo: "Vence hoje", tom: "warn" };
   return { id: "aberto", rotulo: "Em aberto", tom: "neutral" };
 }
+
+// ── Dados de pagamento de um lançamento (v21) ──
+// Campos que a tela edita, conforme o comportamento da forma: boleto (linha digitável), PIX (tipo + chave),
+// transferência (banco, agência, conta, tipo de conta, titular e CPF/CNPJ) e cheque (número).
+export const TIPOS_CHAVE_PIX = { cpf: "CPF", cnpj: "CNPJ", email: "E-mail", telefone: "Telefone", aleatoria: "Chave aleatória" };
+export const TIPOS_CONTA = { corrente: "Conta corrente", poupanca: "Poupança", pagamento: "Conta de pagamento" };
+const CAMPOS_PAGAMENTO = ["linha_digitavel", "pix_chave", "pix_tipo", "banco", "agencia", "conta", "tipo_conta", "titular", "titular_documento", "cheque_numero"];
+
+// Linha digitável no formato do boleto bancário (47 números); outros tamanhos ficam como vieram.
+export function formatarLinha(l) {
+  if (!l) return "";
+  if (l.length !== 47) return l;
+  return `${l.slice(0, 5)}.${l.slice(5, 10)} ${l.slice(10, 15)}.${l.slice(15, 21)} ${l.slice(21, 26)}.${l.slice(26, 32)} ${l[32]} ${l.slice(33)}`;
+}
+export function erroLinhaDigitavel(texto) {
+  const d = String(texto ?? "").replace(/\D/g, "");
+  return d && (d.length < 44 || d.length > 48) ? `A linha tem de 44 a 48 números (tem ${d.length})` : "";
+}
+export const temDadosPagamento = (t) => CAMPOS_PAGAMENTO.some((c) => t[c]);
+export function dadosPagamentoDe(t) {
+  const d = { forma_pagamento_id: String(t.forma_pagamento_id ?? "") };
+  for (const c of CAMPOS_PAGAMENTO) d[c] = t[c] ?? "";
+  d.linha_digitavel = formatarLinha(t.linha_digitavel);
+  return d;
+}
+// Para atualizar_titulo: vencimento e observação vêm do lançamento (ou da tela que edita).
+export function dadosPagamentoParaSalvar(d, { vencimento, observacao }) {
+  const r = { vencimento, observacao: observacao ?? "", forma_pagamento_id: d.forma_pagamento_id || null };
+  for (const c of CAMPOS_PAGAMENTO) r[c] = String(d[c] ?? "").trim();
+  r.linha_digitavel = r.linha_digitavel.replace(/\D/g, "");
+  r.titular_documento = r.titular_documento.replace(/[^0-9A-Za-z]/g, "").toUpperCase();
+  return r;
+}
+export const mesmosDadosPagamento = (a, b) => ["forma_pagamento_id", ...CAMPOS_PAGAMENTO].every((c) => String(a[c] ?? "") === String(b[c] ?? ""));
+// Último lançamento da mesma pessoa com dados de PIX ou banco: para reaproveitar ("usar os dados de ...").
+export function ultimosDadosDaPessoa(titulos, t) {
+  return (titulos || []).filter((x) => x.id !== t.id && x.pessoa_id === t.pessoa_id && (x.pix_chave || x.banco || x.conta))
+    .sort((a, b) => String(b.data_pagamento ?? b.vencimento).localeCompare(String(a.data_pagamento ?? a.vencimento)))[0] ?? null;
+}

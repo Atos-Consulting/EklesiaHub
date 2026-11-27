@@ -6,7 +6,8 @@ import Modal from "./Modal";
 import ThOrdenavel from "./ThOrdenavel";
 import { useOrdenacao } from "./useOrdenacao";
 import { useCarga } from "./useCarga";
-import { carregarExtrato, listarMovimentos, registrarMovimento, estornarMovimento, mensagemErro } from "./db";
+import { carregarExtrato, listarMovimentos, registrarMovimento, estornarMovimento, enviarComprovante, mensagemErro } from "./db";
+import Comprovantes, { EscolherComprovantes } from "./Comprovantes";
 import { formatarMoeda, formatarData, hojeISO, lerNumero, paraCentavos, deCentavos, somarValores } from "./format";
 import { TIPOS_MOVIMENTO, ORIGENS_EXTRATO, somarDias } from "./financeiro";
 
@@ -209,7 +210,7 @@ export default function MovimentosCaixa({ cadastros, podeRegistrar, onCadastrosM
                       <td>{formatarData(m.data)}</td>
                       <td>{TIPOS_MOVIMENTO[m.tipo]}</td>
                       <td><Contas m={m} /></td>
-                      <td className="truncate" style={{ maxWidth: 280 }}>{m.descricao}</td>
+                      <td className="truncate" style={{ maxWidth: 280 }}>{m.qtd_comprovantes > 0 && <span className="muted" title={`${m.qtd_comprovantes} comprovante(s)`} style={{ marginRight: 4 }}><Icone nome="clipe" tamanho={13} /></span>}{m.descricao}</td>
                       <td className="num" style={m.estornado ? { textDecoration: "line-through" } : { fontWeight: 550 }}>{formatarMoeda(m.valor)}</td>
                       <td>{m.estornado ? <Pill tone="danger">Estornado</Pill> : <Pill tone="ok">Válido</Pill>}</td>
                       {podeRegistrar && (
@@ -228,7 +229,7 @@ export default function MovimentosCaixa({ cadastros, podeRegistrar, onCadastrosM
       </div>
 
       {acao?.tipo === "novo" && <MovimentoModal cadastros={cadastros} contaPadrao={filtros.conta} onFechar={() => setAcao(null)} onRegistrado={async () => { setAcao(null); await atualizar(); }} />}
-      {acao?.tipo === "ver" && <DetalheModal m={acao.movimento} podeEstornar={podeRegistrar} onFechar={() => setAcao(null)} onEstornar={() => setAcao({ tipo: "estornar", movimento: acao.movimento })} />}
+      {acao?.tipo === "ver" && <DetalheModal m={acao.movimento} podeEstornar={podeRegistrar} onComprovantes={atualizar} onFechar={() => setAcao(null)} onEstornar={() => setAcao({ tipo: "estornar", movimento: acao.movimento })} />}
       {acao?.tipo === "estornar" && <EstornoModal m={acao.movimento} onFechar={() => setAcao(null)} onConcluido={async () => { setAcao(null); await atualizar(); }} />}
     </div>
   );
@@ -246,10 +247,13 @@ const DICA_TIPO = {
   entrada: "Dinheiro que entra e não é contribuição (ex.: rendimento, devolução, ajuste). Dízimos e ofertas têm tela própria.",
 };
 
-function MovimentoModal({ cadastros, contaPadrao, onFechar, onRegistrado }) {
+// inicial = { tipo, data, valor, origem, destino, descricao } (vem da importação do extrato OFX)
+export function MovimentoModal({ cadastros, contaPadrao, inicial, onFechar, onRegistrado }) {
   const caixasAtivas = cadastros.caixas.filter((c) => c.ativo);
   const padrao = caixasAtivas.some((c) => String(c.id) === contaPadrao) ? contaPadrao : "";
-  const [f, setF] = useState({ tipo: "transferencia", data: hojeISO(), valor: "", origem: padrao, destino: "", descricao: "", centroCustoId: "" });
+  const [f, setF] = useState({ tipo: "transferencia", data: hojeISO(), valor: "", origem: padrao, destino: "", descricao: "", centroCustoId: "", ...inicial });
+  const [arquivos, setArquivos] = useState([]);
+  const [falhaAnexo, setFalhaAnexo] = useState("");
   const [tentou, setTentou] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
@@ -282,21 +286,27 @@ function MovimentoModal({ cadastros, contaPadrao, onFechar, onRegistrado }) {
     setErro("");
     if (Object.keys(erros).length) return;
     setSalvando(true);
+    let movimentoId;
     try {
-      await registrarMovimento({
+      movimentoId = await registrarMovimento({
         tipo: f.tipo, data: f.data, valor, descricao: f.descricao.trim(),
         conta_origem_id: usaOrigem ? Number(f.origem) : null, conta_destino_id: usaDestino ? Number(f.destino) : null,
         centro_custo_id: f.centroCustoId ? Number(f.centroCustoId) : null,
       });
-      await onRegistrado();
-    } catch (e) { setErro(mensagemErro(e)); setSalvando(false); }
+    } catch (e) { setErro(mensagemErro(e)); setSalvando(false); return; }
+    const falhas = [];
+    for (const a of arquivos) {
+      try { await enviarComprovante({ movimentoId }, a); } catch (e) { falhas.push(`${a.name}: ${mensagemErro(e)}`); }
+    }
+    if (falhas.length) { setFalhaAnexo(falhas.join(" · ")); setSalvando(false); return; }
+    await onRegistrado();
   }
 
   const opcoes = (excluir) => caixasAtivas.filter((c) => String(c.id) !== excluir).map((c) => <option key={c.id} value={c.id}>{c.nome} · saldo {formatarMoeda(c.saldo_atual)}</option>);
   const ajuda = { fontSize: 12, marginTop: 4 };
   return (
     <Modal titulo="Novo movimento de caixa" largura={600} fecharFora={false} onFechar={onFechar}
-      rodape={<>
+      rodape={falhaAnexo ? <button className="btn btn-primary" onClick={onRegistrado}>Fechar</button> : <>
         <button className="btn btn-ghost" onClick={onFechar} disabled={salvando}>Cancelar</button>
         <button className="btn btn-primary" onClick={salvar} disabled={salvando}>{salvando ? "Salvando..." : "Salvar"}</button>
       </>}>
@@ -361,6 +371,9 @@ function MovimentoModal({ cadastros, contaPadrao, onFechar, onRegistrado }) {
         </select>
         <button type="submit" hidden />
       </form>
+      <label style={lbl}>Comprovante <span className="muted">(opcional)</span></label>
+      <EscolherComprovantes arquivos={arquivos} onChange={setArquivos} />
+      {falhaAnexo && <div className="alert alert-danger" role="alert" style={{ marginTop: 16 }}><Icone nome="alerta" tamanho={16} /><span>Movimento registrado, mas o comprovante não foi enviado ({falhaAnexo}). Abra o movimento para anexar de novo.</span></div>}
       {erro && <div className="alert alert-danger" role="alert" style={{ marginTop: 16 }}><Icone nome="alerta" tamanho={16} /><span>{erro}</span></div>}
     </Modal>
   );
@@ -375,7 +388,7 @@ function Campo({ rotulo, children }) {
   );
 }
 
-function DetalheModal({ m, podeEstornar, onFechar, onEstornar }) {
+function DetalheModal({ m, podeEstornar, onComprovantes, onFechar, onEstornar }) {
   return (
     <Modal titulo={`${TIPOS_MOVIMENTO[m.tipo]} de ${formatarMoeda(m.valor)}`} largura={560} onFechar={onFechar}
       extra={m.estornado ? <Pill tone="danger">Estornado</Pill> : <Pill tone="ok">Válido</Pill>}
@@ -398,6 +411,8 @@ function DetalheModal({ m, podeEstornar, onFechar, onEstornar }) {
         <Campo rotulo="Registrado por">{m.registrado_por_nome ? `${m.registrado_por_nome}, em ${new Date(m.criado_em).toLocaleString("pt-BR")}` : new Date(m.criado_em).toLocaleString("pt-BR")}</Campo>
       </div>
       <p style={{ marginTop: 12, fontSize: 13.5, color: "var(--text-2)" }}><strong>Descrição:</strong> {m.descricao}</p>
+      <h3 className="section-title">Comprovantes</h3>
+      <Comprovantes alvo={{ movimentoId: m.id }} podeEditar={podeEstornar} onMudou={onComprovantes} />
     </Modal>
   );
 }

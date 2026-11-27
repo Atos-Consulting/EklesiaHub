@@ -8,8 +8,10 @@ import { useOrdenacao } from "./useOrdenacao";
 import { listarTitulosPagar, gerarContasFixas, listarTitulosReceber, listarPagamentosDoTitulo, pagarTitulo, receberTitulo, estornarPagamento, atualizarTitulo, mensagemErro } from "./db";
 import { NovaContaReceber, CancelarContaReceber } from "./NovaContaReceber";
 import { formatarMoeda, formatarData, hojeISO, lerNumero, paraCentavos, deCentavos, somarValores, mascararDocumento } from "./format";
-import { ORIGEM_PAGAMENTO, nomeForma, formaPorId, situacaoTitulo, somarDias } from "./financeiro";
-import FormaSelect from "./FormaSelect";
+import { ORIGEM_PAGAMENTO, nomeForma, situacaoTitulo, somarDias, temDadosPagamento, dadosPagamentoDe, dadosPagamentoParaSalvar, mesmosDadosPagamento, erroLinhaDigitavel, ultimosDadosDaPessoa } from "./financeiro";
+import { CamposPagamento, LeituraPagamento } from "./DadosPagamento";
+import Comprovantes, { EscolherComprovantes } from "./Comprovantes";
+import { enviarComprovante } from "./db";
 
 // Mesma tela para contas a pagar (geradas pelas notas) e contas a receber (lançadas aqui): a aba escolhe a situação.
 // Os textos de cada lado ficam em TEXTOS; os dados vêm das views titulos_pagar e titulos_receber (mesmas colunas).
@@ -183,7 +185,7 @@ export default function ContasPagar({ natureza = "pagar", situacaoInicial, cadas
                     <td>{t.parcela}/{t.total_parcelas}</td>
                     <td className="num" style={t.status === "cancelado" ? { textDecoration: "line-through" } : { fontWeight: 550 }}>{formatarMoeda(t.valor)}</td>
                     <td><Pill tone={sit.tom}>{sit.rotulo}</Pill></td>
-                    <td>{t.data_pagamento ? <>{formatarData(t.data_pagamento)}<div className="muted" style={{ fontSize: 12 }}>{formatarMoeda(t.valor_pago)}</div></> : "—"}</td>
+                    <td>{t.data_pagamento ? <>{formatarData(t.data_pagamento)}{t.qtd_comprovantes > 0 && <span className="muted" title={`${t.qtd_comprovantes} comprovante(s)`} style={{ marginLeft: 4 }}><Icone nome="clipe" tamanho={13} /></span>}<div className="muted" style={{ fontSize: 12 }}>{formatarMoeda(t.valor_pago)}</div></> : "—"}</td>
                     {podePagar && (
                       <td className="acoes" style={{ whiteSpace: "nowrap" }} onClick={(e) => e.stopPropagation()}>
                         {t.status === "aberto" && (
@@ -208,7 +210,7 @@ export default function ContasPagar({ natureza = "pagar", situacaoInicial, cadas
         )}
       </div>
 
-      {acao?.tipo === "pagar" && <PagarModal natureza={natureza} titulo={acao.titulo} caixas={cadastros.caixas} pessoas={cadastros.pessoas} onFechar={() => setAcao(null)} onConcluido={aoConcluir} />}
+      {acao?.tipo === "pagar" && <PagarModal natureza={natureza} titulo={acao.titulo} caixas={cadastros.caixas} pessoas={cadastros.pessoas} formas={cadastros.formas} titulos={titulos} onFechar={() => setAcao(null)} onConcluido={aoConcluir} />}
       {acao?.tipo === "nova" && <NovaContaReceber cadastros={cadastros} onFechar={() => setAcao(null)} onConcluido={aoConcluir} onCadastrosMudaram={onCadastrosMudaram} />}
       {acao?.tipo === "cancelar" && <CancelarContaReceber titulo={acao.titulo} natureza={natureza} onFechar={() => setAcao(null)} onConcluido={aoConcluir} />}
       {acao?.tipo === "estornar" && (
@@ -216,7 +218,7 @@ export default function ContasPagar({ natureza = "pagar", situacaoInicial, cadas
           pagamentoId={acao.titulo.pagamento_id} onFechar={() => setAcao(null)} onConcluido={aoConcluir} />
       )}
       {acao?.tipo === "ver" && (
-        <LancamentoModal natureza={natureza} titulo={acao.titulo} caixas={cadastros.caixas} formas={cadastros.formas} podePagar={podePagar} onFechar={() => setAcao(null)}
+        <LancamentoModal natureza={natureza} titulo={acao.titulo} caixas={cadastros.caixas} formas={cadastros.formas} titulos={titulos} podePagar={podePagar} onFechar={() => setAcao(null)}
           onCancelar={() => setAcao({ tipo: "cancelar", titulo: acao.titulo })}
           onSalvo={async () => { await Promise.all([recarregar(), onCadastrosMudaram()]); }}
           onPagar={() => setAcao({ tipo: "pagar", titulo: acao.titulo })} onEstornar={() => setAcao({ tipo: "estornar", titulo: acao.titulo })} />
@@ -227,20 +229,26 @@ export default function ContasPagar({ natureza = "pagar", situacaoInicial, cadas
 
 const valorCampo = (txt) => { const n = lerNumero(txt); return String(txt ?? "").trim() === "" ? 0 : n; };
 
-function PagarModal({ natureza, titulo: t, caixas, pessoas, onFechar, onConcluido }) {
+// inicial = { data, contaCaixaId } (vem da importação do extrato OFX)
+export function PagarModal({ natureza, titulo: t, caixas, pessoas, formas, titulos, inicial: pre, onFechar, onConcluido }) {
   const T = TEXTOS[natureza];
   const receber = natureza === "receber";
   const ativas = caixas.filter((c) => c.ativo);
   const prevista = ativas.find((c) => c.id === t.conta_caixa_id);
   const [f, setF] = useState({
-    contaCaixaId: prevista ? String(prevista.id) : ativas.length === 1 ? String(ativas[0].id) : "",
-    data: hojeISO(), juros: "", multa: "", desconto: "", observacao: "",
+    contaCaixaId: pre?.contaCaixaId ? String(pre.contaCaixaId) : prevista ? String(prevista.id) : ativas.length === 1 ? String(ativas[0].id) : "",
+    data: pre?.data ?? hojeISO(), juros: "", multa: "", desconto: "", observacao: pre?.observacao ?? "",
   });
+  const [inicial] = useState(() => dadosPagamentoDe(t));
+  const [dados, setDados] = useState(inicial);
+  const [arquivos, setArquivos] = useState([]);
+  const [falhaAnexo, setFalhaAnexo] = useState(""); // pagamento gravado, mas algum comprovante não subiu
   const [tentou, setTentou] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
   const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
   const caixa = caixas.find((c) => String(c.id) === f.contaCaixaId);
+  const sugestao = ultimosDadosDaPessoa(titulos, t);
   const fornecedor = pessoas.find((p) => p.id === t.pessoa_id);
 
   const juros = valorCampo(f.juros), multa = valorCampo(f.multa), desconto = valorCampo(f.desconto);
@@ -252,23 +260,32 @@ function PagarModal({ natureza, titulo: t, caixas, pessoas, onFechar, onConcluid
   for (const k of ["juros", "multa", "desconto"]) if (!(valorCampo(f[k]) >= 0)) erros[k] = "Valor inválido";
   if (!erros.desconto && totalCent <= 0) erros.desconto = receber ? "Maior que o valor a receber" : "Maior que o valor a pagar";
   if (!erros.data && receber && caixa && f.data < caixa.data_saldo_inicial) erros.data = `Antes do saldo inicial da conta (${formatarData(caixa.data_saldo_inicial)})`;
+  if (erroLinhaDigitavel(dados.linha_digitavel)) erros.linha = erroLinhaDigitavel(dados.linha_digitavel);
 
   async function confirmar() {
     setTentou(true);
     setErro("");
-    if (Object.keys(erros).length) return;
+    if (Object.keys(erros).length) { if (erros.linha) setErro(`Boleto: ${erros.linha}.`); return; }
     setSalvando(true);
+    let pagamentoId;
     try {
-      await (receber ? receberTitulo : pagarTitulo)(t.id, { contaCaixaId: f.contaCaixaId, data: f.data, juros, multa, desconto, observacao: f.observacao });
-      await onConcluido();
-    } catch (e) { setErro(mensagemErro(e)); setSalvando(false); }
+      // Forma e dados escolhidos agora ficam no lançamento (e o pagamento grava a forma dele).
+      if (!mesmosDadosPagamento(dados, inicial)) await atualizarTitulo(t.id, dadosPagamentoParaSalvar(dados, { vencimento: t.vencimento, observacao: t.observacao }));
+      pagamentoId = await (receber ? receberTitulo : pagarTitulo)(t.id, { contaCaixaId: f.contaCaixaId, data: f.data, juros, multa, desconto, observacao: f.observacao });
+    } catch (e) { setErro(mensagemErro(e)); setSalvando(false); return; }
+    const falhas = [];
+    for (const a of arquivos) {
+      try { await enviarComprovante({ pagamentoId }, a); } catch (e) { falhas.push(`${a.name}: ${mensagemErro(e)}`); }
+    }
+    if (falhas.length) { setFalhaAnexo(falhas.join(" · ")); setSalvando(false); return; }
+    await onConcluido();
   }
   const borda = (k) => (tentou && erros[k] ? { borderColor: "var(--danger)" } : {});
   const saldoDepois = caixa ? deCentavos(paraCentavos(Number(caixa.saldo_atual)) + (receber ? totalCent : -totalCent)) : null;
 
   return (
     <Modal titulo={`Registrar ${T.baixa.toLowerCase()}`} largura={560} fecharFora={false} onFechar={onFechar}
-      rodape={<>
+      rodape={falhaAnexo ? <button className="btn btn-primary" onClick={onConcluido}>Fechar</button> : <>
         <button className="btn btn-ghost" onClick={onFechar} disabled={salvando}>Cancelar</button>
         <button className="btn btn-primary" onClick={confirmar} disabled={salvando}>{salvando ? "Registrando..." : Number.isFinite(totalCent) && totalCent > 0 ? `${T.acao} ${formatarMoeda(deCentavos(totalCent))}` : T.acao}</button>
       </>}>
@@ -306,15 +323,20 @@ function PagarModal({ natureza, titulo: t, caixas, pessoas, onFechar, onConcluid
           ))}
         </div>
         <label style={lbl} htmlFor="pg-obs">Observação</label>
-        <input id="pg-obs" style={inp} maxLength={200} value={f.observacao} onChange={set("observacao")} placeholder="Ex.: PIX nº, comprovante, cheque nº" />
+        <input id="pg-obs" style={inp} maxLength={200} value={f.observacao} onChange={set("observacao")} placeholder="Ex.: nº da transação, autenticação" />
         <button type="submit" hidden />
       </form>
+      <h3 className="section-title">{T.dados}</h3>
+      <CamposPagamento formas={formas} valor={dados} onChange={setDados} prefixo="pg" sugestao={sugestao} rotuloForma={receber ? "Forma de recebimento" : "Forma de pagamento"} />
+      <h3 className="section-title">Comprovante</h3>
+      <EscolherComprovantes arquivos={arquivos} onChange={setArquivos} />
       <div className="totais" style={{ maxWidth: "none" }}>
         <div><span>Parcela</span><span>{formatarMoeda(t.valor)}</span></div>
         {juros + multa > 0 && <div><span>(+) Juros e multa</span><span>{formatarMoeda(juros + multa)}</span></div>}
         {desconto > 0 && <div><span>(−) Desconto</span><span>{formatarMoeda(desconto)}</span></div>}
         <div className="final"><span>Total {receber ? "recebido" : "pago"}</span><span>{Number.isFinite(totalCent) ? formatarMoeda(deCentavos(totalCent)) : "—"}</span></div>
       </div>
+      {falhaAnexo && <div className="alert alert-danger" role="alert" style={{ marginTop: 16 }}><Icone nome="alerta" tamanho={16} /><span>{T.baixa} registrado, mas o comprovante não foi enviado ({falhaAnexo}). Abra o lançamento para anexar de novo.</span></div>}
       {erro && <div className="alert alert-danger" role="alert" style={{ marginTop: 16 }}><Icone nome="alerta" tamanho={16} /><span>{erro}</span></div>}
     </Modal>
   );
@@ -348,44 +370,20 @@ export function EstornoModal({ natureza = "pagar", descricao, pagamentoId, onFec
   );
 }
 
-const temDadosPagamento = (t) => Boolean(t.linha_digitavel || t.pix_chave || t.banco || t.agencia || t.conta);
-// Linha digitável no formato do boleto bancário (47 números); outros tamanhos ficam como vieram.
-function formatarLinha(l) {
-  if (!l) return "";
-  if (l.length !== 47) return l;
-  return `${l.slice(0, 5)}.${l.slice(5, 10)} ${l.slice(10, 15)}.${l.slice(15, 21)} ${l.slice(21, 26)}.${l.slice(26, 32)} ${l[32]} ${l.slice(33)}`;
-}
-
-function Copiar({ texto }) {
-  const [ok, setOk] = useState(false);
-  if (!texto) return null;
-  return (
-    <button type="button" className="btn btn-ghost btn-sm" style={{ flex: "none" }}
-      onClick={() => navigator.clipboard?.writeText(texto).then(() => { setOk(true); setTimeout(() => setOk(false), 1500); }).catch(() => {})}>
-      {ok ? "Copiado" : "Copiar"}
-    </button>
-  );
-}
-
 // Lançamento (título a pagar): dados da nota, vencimento e dados de pagamento, e o histórico de pagamentos.
-function LancamentoModal({ natureza, titulo: t, caixas, formas, podePagar, onFechar, onSalvo, onPagar, onEstornar, onCancelar }) {
+function LancamentoModal({ natureza, titulo: t, caixas, formas, titulos, podePagar, onFechar, onSalvo, onPagar, onEstornar, onCancelar }) {
   const T = TEXTOS[natureza];
   const receber = natureza === "receber";
   const editavel = podePagar && t.status === "aberto";
-  const [f, setF] = useState({
-    vencimento: t.vencimento, forma_pagamento_id: String(t.forma_pagamento_id ?? ""), linha_digitavel: formatarLinha(t.linha_digitavel),
-    pix_chave: t.pix_chave ?? "", banco: t.banco ?? "", agencia: t.agencia ?? "", conta: t.conta ?? "", observacao: t.observacao ?? "",
-  });
+  const [f, setF] = useState({ vencimento: t.vencimento, observacao: t.observacao ?? "" });
+  const [dados, setDados] = useState(() => dadosPagamentoDe(t));
   const [historico, setHistorico] = useState(null);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
   const [ok, setOk] = useState(false);
   const set = (k) => (e) => { setOk(false); setF((p) => ({ ...p, [k]: e.target.value })); };
   const sit = situacaoTitulo(t, hojeISO(), natureza);
-  const digitos = f.linha_digitavel.replace(/\D/g, "");
-  const erroLinha = digitos && (digitos.length < 44 || digitos.length > 48) ? `A linha tem de 44 a 48 números (tem ${digitos.length})` : "";
-  const tipoForma = formaPorId(formas, f.forma_pagamento_id)?.tipo; // comportamento da forma escolhida
-  const mostra = (forma, campo) => tipoForma === forma || Boolean(f[campo]);
+  const erroLinha = erroLinhaDigitavel(dados.linha_digitavel);
 
   useEffect(() => {
     let ativo = true;
@@ -399,7 +397,7 @@ function LancamentoModal({ natureza, titulo: t, caixas, formas, podePagar, onFec
     if (!f.vencimento) { setErro("Informe o vencimento."); return; }
     if (erroLinha) { setErro(erroLinha); return; }
     setSalvando(true);
-    try { await atualizarTitulo(t.id, { ...f, forma_pagamento_id: f.forma_pagamento_id || null, linha_digitavel: digitos }); await onSalvo(); setOk(true); }
+    try { await atualizarTitulo(t.id, dadosPagamentoParaSalvar(dados, f)); await onSalvo(); setOk(true); }
     catch (e) { setErro(mensagemErro(e)); }
     finally { setSalvando(false); }
   }
@@ -435,51 +433,15 @@ function LancamentoModal({ natureza, titulo: t, caixas, formas, podePagar, onFec
               <label style={lbl} htmlFor="lc-venc">Vencimento *</label>
               <input id="lc-venc" type="date" style={inp} value={f.vencimento} onChange={set("vencimento")} />
             </div>
-            <div>
-              <label style={lbl} htmlFor="lc-forma">Forma de pagamento</label>
-              <FormaSelect id="lc-forma" style={inp} formas={formas} value={f.forma_pagamento_id} vazio="— Não informada —"
-                onChange={(v) => { setOk(false); setF((p) => ({ ...p, forma_pagamento_id: v })); }} />
-            </div>
           </div>
-          {mostra("boleto", "linha_digitavel") && (
-            <>
-              <label style={lbl} htmlFor="lc-linha">Linha digitável ou código de barras do boleto</label>
-              <div style={{ display: "flex", gap: 8 }}>
-                <input id="lc-linha" style={{ ...inp, fontFamily: "monospace", ...(erroLinha ? { borderColor: "var(--danger)" } : {}) }} inputMode="numeric" maxLength={60}
-                  value={f.linha_digitavel} onChange={set("linha_digitavel")} placeholder="00000.00000 00000.000000 00000.000000 0 00000000000000" />
-                <Copiar texto={digitos} />
-              </div>
-              {erroLinha && <div style={{ fontSize: 12.5, color: "var(--danger)", marginTop: 5 }}>{erroLinha}</div>}
-            </>
-          )}
-          {mostra("pix", "pix_chave") && (
-            <>
-              <label style={lbl} htmlFor="lc-pix">Chave PIX</label>
-              <div style={{ display: "flex", gap: 8 }}>
-                <input id="lc-pix" style={inp} maxLength={77} value={f.pix_chave} onChange={set("pix_chave")} placeholder="CPF/CNPJ, e-mail, telefone ou chave aleatória" />
-                <Copiar texto={f.pix_chave.trim()} />
-              </div>
-            </>
-          )}
-          {(mostra("transferencia", "banco") || f.agencia || f.conta) && (
-            <div style={grade}>
-              <div><label style={lbl} htmlFor="lc-banco">Banco</label><input id="lc-banco" style={inp} maxLength={60} value={f.banco} onChange={set("banco")} placeholder="Ex.: Banco do Brasil (001)" /></div>
-              <div><label style={lbl} htmlFor="lc-ag">Agência</label><input id="lc-ag" style={inp} maxLength={20} value={f.agencia} onChange={set("agencia")} /></div>
-              <div><label style={lbl} htmlFor="lc-conta">Conta</label><input id="lc-conta" style={inp} maxLength={30} value={f.conta} onChange={set("conta")} /></div>
-            </div>
-          )}
+          <CamposPagamento formas={formas} valor={dados} onChange={(d) => { setOk(false); setDados(d); }} prefixo="lc" sugestao={ultimosDadosDaPessoa(titulos, t)} />
           <label style={lbl} htmlFor="lc-obs">Observação</label>
           <textarea id="lc-obs" style={{ ...inp, minHeight: 56, resize: "vertical", fontFamily: "inherit" }} maxLength={500} value={f.observacao} onChange={set("observacao")} placeholder={receber ? "Ex.: cobrar por WhatsApp, contrato assinado em 10/01" : "Ex.: boleto enviado por e-mail, falar com o financeiro do fornecedor"} />
         </>
       ) : (
         <>
-          <div style={grade}>
-            {leitura("Vencimento", formatarData(t.vencimento))}
-            {leitura("Forma de pagamento", t.forma_pagamento_nome ?? nomeForma(formas, t.forma_pagamento_id, t.forma_pagamento))}
-          </div>
-          {t.linha_digitavel && <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}><div style={{ flex: 1 }}>{leitura("Linha digitável", <span style={{ fontFamily: "monospace" }}>{formatarLinha(t.linha_digitavel)}</span>)}</div><Copiar texto={t.linha_digitavel} /></div>}
-          {t.pix_chave && leitura("Chave PIX", t.pix_chave)}
-          {(t.banco || t.agencia || t.conta) && <div style={grade}>{leitura("Banco", t.banco)}{leitura("Agência", t.agencia)}{leitura("Conta", t.conta)}</div>}
+          {leitura("Vencimento", formatarData(t.vencimento))}
+          <LeituraPagamento t={t} formas={formas} />
           {t.observacao && leitura("Observação", t.observacao)}
           {!podePagar && t.status === "aberto" && <div className="muted" style={{ fontSize: 12.5, marginTop: 8 }}>Só Supervisor ou Administrador altera estes dados.</div>}
         </>
@@ -501,6 +463,12 @@ function LancamentoModal({ natureza, titulo: t, caixas, formas, podePagar, onFec
             </tr>
           ))}</tbody>
         </table>
+      )}
+      {t.pagamento_id && (
+        <>
+          <h3 className="section-title">Comprovantes do {T.baixa.toLowerCase()}</h3>
+          <Comprovantes alvo={{ pagamentoId: t.pagamento_id }} podeEditar={podePagar} onMudou={onSalvo} />
+        </>
       )}
       {erro && <div className="alert alert-danger" role="alert" style={{ marginTop: 16 }}><Icone nome="alerta" tamanho={16} /><span>{erro}</span></div>}
     </Modal>

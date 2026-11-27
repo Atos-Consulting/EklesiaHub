@@ -3,6 +3,7 @@ import { Header } from "../ui";
 import { inp } from "../estilos";
 import Icone from "./Icone";
 import { carregarRelatorioMes, mensagemErro } from "./db";
+import { exportarParaContador } from "./exportarContador";
 import { formatarMoeda, formatarData, hojeISO, paraCentavos, deCentavos } from "./format";
 import { ORIGENS_EXTRATO, somarDias, somarMeses } from "./financeiro";
 
@@ -100,6 +101,8 @@ export default function RelatorioMes({ cadastros, perfil }) {
   const hoje = hojeISO();
   const [mes, setMes] = useState(() => mesMais(hoje.slice(0, 7), -1)); // padrão: o último mês fechado
   const [resultado, setResultado] = useState({ chave: null, dados: null, erro: "" });
+  const [exportando, setExportando] = useState(false);
+  const [erroExport, setErroExport] = useState("");
   const contaIds = useMemo(() => cadastros.caixas.map((c) => c.id), [cadastros.caixas]);
 
   const mesOk = /^\d{4}-\d{2}$/.test(mes);
@@ -199,10 +202,21 @@ export default function RelatorioMes({ cadastros, perfil }) {
               <button type="button" className="btn btn-ghost" onClick={() => setMes((m) => mesMais(m, 1))} disabled={!mesOk} aria-label="Próximo mês">›</button>
             </div>
           </label>
-          <button type="button" className="btn btn-primary" style={{ marginLeft: "auto", alignSelf: "flex-end" }} onClick={() => window.print()} disabled={!rel}>
+          <button type="button" className="btn btn-ghost" style={{ marginLeft: "auto", alignSelf: "flex-end" }} disabled={!periodo || exportando}
+            title="Planilha do mês para o contador: resumo, extrato, pagamentos, recebimentos, entradas e movimentos"
+            onClick={async () => {
+              setErroExport(""); setExportando(true);
+              try { await exportarParaContador({ de: periodo.de, ate: periodo.ate, cadastros, nomeIgreja: perfil?.empresa_nome }); }
+              catch (e) { setErroExport(mensagemErro(e)); }
+              finally { setExportando(false); }
+            }}>
+            <Icone nome="arquivo" tamanho={16} /> {exportando ? "Gerando..." : "Exportar para o contador (Excel)"}
+          </button>
+          <button type="button" className="btn btn-primary" style={{ alignSelf: "flex-end" }} onClick={() => window.print()} disabled={!rel}>
             <Icone nome="impressora" tamanho={16} /> Imprimir ou salvar PDF
           </button>
         </div>
+        {erroExport && <div className="alert alert-danger" role="alert" style={{ margin: "0 16px 12px" }}><Icone nome="alerta" tamanho={16} /><span>{erroExport}</span></div>}
         {(emAndamento || futuro) && (
           <div className="alert alert-warn" style={{ margin: "0 16px 12px" }}>
             <Icone nome="alerta" tamanho={16} />
