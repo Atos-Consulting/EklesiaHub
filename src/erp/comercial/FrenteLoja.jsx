@@ -169,17 +169,21 @@ function Vendendo({ caixa, ponto, cadastros, podeFechar, onFechado }) {
   const descInvalido = !(descCent >= 0) || (descCent > 0 && descCent >= subtotal);
   const total = subtotal - (descInvalido ? 0 : descCent);
 
-  function adicionar(p) {
+  // Volta o cursor para a busca: o leitor de código de barras "digita" onde o cursor estiver.
+  const focarBusca = () => setTimeout(() => buscaRef.current?.focus(), 0);
+  function adicionar(p, qtd = 1) {
     setAviso("");
-    if (p.controla_estoque && noCarrinho(p.id) + 1 > Number(p.estoque)) { setAviso(`Sem estoque de “${p.nome}” para mais uma unidade.`); return; }
+    focarBusca();
+    if (p.controla_estoque && noCarrinho(p.id) + qtd > Number(p.estoque)) { setAviso(`Sem estoque de “${p.nome}” para ${qtd > 1 ? `mais ${qtd} unidades` : "mais uma unidade"} (há ${quantidadeTexto(Number(p.estoque) - noCarrinho(p.id))}).`); return; }
     setCarrinho((c) => {
       const i = c.findIndex((x) => x.produtoId === p.id);
-      if (i >= 0) return c.map((x, n) => (n === i ? { ...x, quantidade: Number(x.quantidade) + 1 } : x));
-      return [...c, { chave: crypto.randomUUID(), produtoId: p.id, descricao: p.nome, preco: Number(p.preco), quantidade: 1, unidade: p.unidade }];
+      if (i >= 0) return c.map((x, n) => (n === i ? { ...x, quantidade: Number(x.quantidade) + qtd } : x));
+      return [...c, { chave: crypto.randomUUID(), produtoId: p.id, descricao: p.nome, preco: Number(p.preco), quantidade: qtd, unidade: p.unidade }];
     });
   }
   function mudarQtd(chave, q) {
     setAviso("");
+    focarBusca();
     setCarrinho((c) => c.flatMap((x) => {
       if (x.chave !== chave) return [x];
       if (q <= 0) return [];
@@ -188,12 +192,25 @@ function Vendendo({ caixa, ponto, cadastros, podeFechar, onFechado }) {
       return [{ ...x, quantidade: q }];
     }));
   }
+  // Enter na busca (o leitor de código de barras manda o código seguido de Enter).
+  // "3*7891234" ou "3x7891234" adiciona 3 unidades.
   function buscarEnter(e) {
     if (e.key !== "Enter") return;
     e.preventDefault();
-    const exato = doLocal.find((p) => (p.codigo ?? "").toLowerCase() === termo);
-    const alvo = exato ?? (achados.length === 1 ? achados[0] : null);
-    if (alvo) { adicionar(alvo); setBusca(""); }
+    if (!termo) return;
+    const m = termo.match(/^(\d+(?:[.,]\d+)?)\s*[*x]\s*(.+)$/);
+    const qtd = m ? Number(m[1].replace(",", ".")) : 1;
+    const chave = (m ? m[2] : termo).trim();
+    const exato = doLocal.find((p) => (p.codigo ?? "").toLowerCase() === chave);
+    const porNome = doLocal.filter((p) => p.nome.toLowerCase().includes(chave));
+    const alvo = exato ?? (porNome.length === 1 ? porNome[0] : null);
+    if (alvo && qtd > 0) { adicionar(alvo, qtd); setBusca(""); return; }
+    if (porNome.length > 1) return; // vários pelo nome: a grade já mostra para escolher
+    const outro = (produtos ?? []).find((p) => (p.codigo ?? "").toLowerCase() === chave);
+    setAviso(outro
+      ? `“${outro.nome}” (código ${outro.codigo}) ${outro.ativo ? "não é vendido neste local" : "está inativo"}. Ajuste em Comercial → Produtos.`
+      : `Código ${chave} não cadastrado. Cadastre em Comercial → Produtos ou venda como item avulso.`);
+    setBusca("");
   }
   function concluida(venda, troco) {
     setPagando(false);
@@ -201,7 +218,7 @@ function Vendendo({ caixa, ponto, cadastros, podeFechar, onFechado }) {
     setDesconto("");
     setAviso(`Venda nº ${venda} concluída.${troco > 0 ? ` Troco: ${moeda(troco)}.` : ""}`);
     recarregar();
-    buscaRef.current?.focus();
+    focarBusca();
   }
 
   const concluidas = vendas.filter((v) => v.status === "concluida");
@@ -222,7 +239,7 @@ function Vendendo({ caixa, ponto, cadastros, podeFechar, onFechado }) {
       <div className="pdv">
         <section className="card pdv-produtos">
           <div className="pdv-busca">
-            <input ref={buscaRef} autoFocus style={inp} placeholder="Buscar produto ou ler o código de barras (Enter adiciona)" value={busca}
+            <input ref={buscaRef} autoFocus style={inp} placeholder="Bipe o código de barras ou busque pelo nome (3*código = 3 unidades)" value={busca}
               onChange={(e) => setBusca(e.target.value)} onKeyDown={buscarEnter} aria-label="Buscar produto" />
             <button type="button" className="btn btn-ghost" onClick={() => setAvulso(true)} title="Item sem cadastro (ex.: bazar)"><Icone nome="mais" tamanho={16} /> Item avulso</button>
           </div>
@@ -281,9 +298,9 @@ function Vendendo({ caixa, ponto, cadastros, podeFechar, onFechado }) {
       </section>
 
       {pagando && <PagamentoModal caixa={caixa} carrinho={carrinho} desconto={descCent} total={total} formas={formasDeVenda(cadastros.formas)}
-        onFechar={() => setPagando(false)} onConcluida={concluida} />}
-      {avulso && <AvulsoModal onFechar={() => setAvulso(false)} onIncluir={(i) => { setCarrinho((c) => [...c, { ...i, chave: crypto.randomUUID() }]); setAvulso(false); }} />}
-      {cancelando && <CancelarVendaModal venda={cancelando} onFechar={() => setCancelando(null)} onCancelada={() => { setCancelando(null); setAviso(""); recarregar(); }} />}
+        onFechar={() => { setPagando(false); focarBusca(); }} onConcluida={concluida} />}
+      {avulso && <AvulsoModal onFechar={() => { setAvulso(false); focarBusca(); }} onIncluir={(i) => { setCarrinho((c) => [...c, { ...i, chave: crypto.randomUUID() }]); setAvulso(false); focarBusca(); }} />}
+      {cancelando && <CancelarVendaModal venda={cancelando} onFechar={() => { setCancelando(null); focarBusca(); }} onCancelada={() => { setCancelando(null); setAviso(""); recarregar(); focarBusca(); }} />}
       {fechando && <FecharCaixaModal caixa={caixa} ponto={ponto} onFechar={() => setFechando(false)} onFechado={onFechado} />}
     </div>
   );

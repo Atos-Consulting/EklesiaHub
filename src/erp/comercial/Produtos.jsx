@@ -30,6 +30,7 @@ export default function Produtos({ cadastros, podeEditar }) {
   const [ajustando, setAjustando] = useState(null);
   const [vendo, setVendo] = useState(null);
   const [aviso, setAviso] = useState("");
+  const [codigoNovo, setCodigoNovo] = useState("");
 
   const recarregar = useCallback(() => listarProdutos().then((d) => { setProdutos(d); setErro(""); }).catch((e) => setErro(mensagemErro(e))), []);
   useEffect(() => { recarregar(); }, [recarregar]);
@@ -50,7 +51,7 @@ export default function Produtos({ cadastros, podeEditar }) {
     <div>
       <div className="page-header">
         <Header title="Produtos" subtitle="O que se vende no frente de loja, com o preço e onde é vendido. O estoque é opcional por produto: entra pela nota de entrada, sai na venda e se corrige com ajuste." />
-        {podeEditar && <button className="btn btn-primary" onClick={() => setEditando("novo")}><Icone nome="mais" tamanho={16} traco={2.2} /> Novo produto</button>}
+        {podeEditar && <button className="btn btn-primary" onClick={() => { setCodigoNovo(""); setEditando("novo"); }}><Icone nome="mais" tamanho={16} traco={2.2} /> Novo produto</button>}
       </div>
       <div className="stat-grid">
         <div className="card stat"><div><div className="stat-label">Produtos ativos</div><div className="stat-value">{(produtos ?? []).filter((p) => p.ativo).length}</div></div><div className="stat-icon"><Icone nome="sacola" /></div></div>
@@ -62,7 +63,16 @@ export default function Produtos({ cadastros, podeEditar }) {
       <div className="card">
         <div className="toolbar">
           <label style={{ flex: "1 1 260px", maxWidth: 380 }}>Buscar
-            <input placeholder="Nome, código ou categoria" value={busca} onChange={(e) => setBusca(e.target.value)} style={inp} />
+            <input placeholder="Nome, categoria ou bipe o código" value={busca} onChange={(e) => setBusca(e.target.value)} style={inp}
+              onKeyDown={(e) => {
+                // leitor de código de barras: código + Enter abre o produto, ou o cadastro de um novo com o código preenchido
+                if (e.key !== "Enter" || !busca.trim()) return;
+                e.preventDefault();
+                const cod = busca.trim();
+                const achado = (produtos ?? []).find((p) => (p.codigo ?? "").toLowerCase() === cod.toLowerCase());
+                if (achado) { if (podeEditar) setEditando(achado); else setFiltro("todos"); return; }
+                if (podeEditar && /^[0-9A-Za-z.-]{3,60}$/.test(cod) && !/\s/.test(cod)) { setCodigoNovo(cod); setBusca(""); setEditando("novo"); }
+              }} />
           </label>
           <label>Mostrar
             <select style={{ ...inp, width: 200 }} value={filtro} onChange={(e) => setFiltro(e.target.value)}>
@@ -106,7 +116,7 @@ export default function Produtos({ cadastros, podeEditar }) {
         </div>
         {filtrados.length > 0 && <div className="table-footer"><span>{filtrados.length} produto(s)</span></div>}
       </div>
-      {editando && <ProdutoForm produto={editando === "novo" ? null : editando} pontos={cadastros.pontos ?? []} onFechar={() => setEditando(null)}
+      {editando && <ProdutoForm produto={editando === "novo" ? null : editando} codigoInicial={codigoNovo} produtos={produtos ?? []} pontos={cadastros.pontos ?? []} onFechar={() => setEditando(null)}
         onSalvo={() => salvo(editando === "novo" ? "Produto cadastrado." : "Produto atualizado.")} />}
       {ajustando && <AjusteModal produto={ajustando} onFechar={() => setAjustando(null)} onSalvo={() => salvo(`Estoque de “${ajustando.nome}” ajustado.`)} />}
       {vendo && <MovimentosModal produto={vendo} onFechar={() => setVendo(null)} />}
@@ -114,9 +124,9 @@ export default function Produtos({ cadastros, podeEditar }) {
   );
 }
 
-function ProdutoForm({ produto, pontos, onFechar, onSalvo }) {
+function ProdutoForm({ produto, codigoInicial, produtos, pontos, onFechar, onSalvo }) {
   const [f, setF] = useState({
-    nome: produto?.nome ?? "", codigo: produto?.codigo ?? "", categoria: produto?.categoria ?? "", unidade: produto?.unidade ?? "UN",
+    nome: produto?.nome ?? "", codigo: produto?.codigo ?? codigoInicial ?? "", categoria: produto?.categoria ?? "", unidade: produto?.unidade ?? "UN",
     preco: produto ? numeroParaCampo(Number(produto.preco)) : "", controlaEstoque: produto?.controla_estoque ?? false,
     estoqueMinimo: produto?.estoque_minimo !== null && produto?.estoque_minimo !== undefined ? quantidadeTexto(produto.estoque_minimo) : "",
     pontosVenda: produto?.pontos_venda ?? [], ativo: produto?.ativo ?? true,
@@ -131,6 +141,8 @@ function ProdutoForm({ produto, pontos, onFechar, onSalvo }) {
   if (!f.nome.trim()) erros.nome = "Informe o nome";
   if (!(preco >= 0)) erros.preco = "Informe o preço";
   if (minimo !== null && !(minimo >= 0)) erros.estoqueMinimo = "Valor inválido";
+  const repetido = f.codigo.trim() && produtos.find((p) => p.id !== produto?.id && (p.codigo ?? "").toLowerCase() === f.codigo.trim().toLowerCase());
+  if (repetido) erros.codigo = `Este código já é do produto “${repetido.nome}”`;
   const borda = (k) => (tentou && erros[k] ? { borderColor: "var(--danger)" } : {});
   const marcarPonto = (id, sim) => setF((p) => ({ ...p, pontosVenda: sim ? [...p.pontosVenda, id] : p.pontosVenda.filter((x) => x !== id) }));
 
@@ -145,12 +157,16 @@ function ProdutoForm({ produto, pontos, onFechar, onSalvo }) {
 
   return (
     <FormModal titulo={produto ? "Editar produto" : "Novo produto"} largura={580} onFechar={onFechar} onSalvar={salvar} salvando={salvando} erro={erro}>
-      <label style={{ ...lbl, marginTop: 4 }} htmlFor="pr-nome">Nome *</label>
-      <input id="pr-nome" autoFocus maxLength={120} style={{ ...inp, ...borda("nome") }} value={f.nome} onChange={set("nome")} placeholder="Ex.: Café expresso, Bíblia de estudo" />
+      <label style={{ ...lbl, marginTop: 4 }} htmlFor="pr-cod">Código de barras ou interno</label>
+      <input id="pr-cod" autoFocus={!produto && !f.codigo} maxLength={60} style={{ ...inp, fontFamily: "monospace", letterSpacing: 0.5, ...(erros.codigo ? { borderColor: "var(--danger)" } : {}) }}
+        value={f.codigo} onChange={set("codigo")} placeholder="Bipe o código com o leitor ou digite"
+        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); document.getElementById("pr-nome")?.focus(); } }} />
+      {erros.codigo ? <div style={msgErro}>{erros.codigo}</div> : <div className="muted" style={{ fontSize: 12.5, marginTop: 4 }}>Opcional. Com o código, a venda é feita só bipando o produto.</div>}
+
+      <label style={lbl} htmlFor="pr-nome">Nome *</label>
+      <input id="pr-nome" autoFocus={Boolean(produto) || Boolean(f.codigo)} maxLength={120} style={{ ...inp, ...borda("nome") }} value={f.nome} onChange={set("nome")} placeholder="Ex.: Café expresso, Bíblia de estudo" />
       {tentou && erros.nome && <div style={msgErro}>{erros.nome}</div>}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0 12px" }}>
-        <div><label style={lbl} htmlFor="pr-cod">Código de barras ou interno</label>
-          <input id="pr-cod" maxLength={60} style={inp} value={f.codigo} onChange={set("codigo")} /></div>
         <div><label style={lbl} htmlFor="pr-cat">Categoria</label>
           <input id="pr-cat" maxLength={60} style={inp} value={f.categoria} onChange={set("categoria")} placeholder="Ex.: Bebidas, Livros" /></div>
         <div><label style={lbl} htmlFor="pr-un">Unidade</label>
