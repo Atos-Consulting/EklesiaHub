@@ -6,6 +6,14 @@ import { salvarTipoContabil, mensagemErro } from "../db";
 import { CabecalhoAba, FormModal, CampoAtivo, Situacao, BotaoEditar } from "./comum";
 import { rotuloConta } from "./rotulos";
 
+// Tributos a recuperar (v28): saem do custo do item e vão para uma conta do ativo. Código sugerido = plano padrão.
+const TRIBUTOS = [
+  { id: "icms", rotulo: "ICMS", codigo: "1.1.05" }, { id: "ipi", rotulo: "IPI", codigo: "1.1.06" },
+  { id: "pis", rotulo: "PIS", codigo: "1.1.07" }, { id: "cofins", rotulo: "COFINS", codigo: "1.1.08" },
+  { id: "iss", rotulo: "ISS", codigo: "1.1.09" }, { id: "cbs", rotulo: "CBS", codigo: "1.1.10" }, { id: "ibs", rotulo: "IBS", codigo: "1.1.11" },
+];
+const listaTributos = (t) => TRIBUTOS.filter((x) => t?.tributos_recuperar?.[x.id]).map((x) => x.rotulo);
+
 export default function TiposContabeis({ cadastros, onCadastrosMudaram }) {
   const [editando, setEditando] = useState(null);
   const [busca, setBusca] = useState("");
@@ -52,7 +60,7 @@ export default function TiposContabeis({ cadastros, onCadastrosMudaram }) {
                 <td style={{ fontWeight: 550 }}>{t.nome}</td>
                 <td>{rotuloConta(conta.get(t.conta_debito_id))}</td>
                 <td>{rotuloConta(conta.get(t.conta_credito_id))}</td>
-                <td className="truncate muted">{t.descricao}</td>
+                <td className="truncate muted">{t.descricao}{listaTributos(t).length > 0 && <div style={{ fontSize: 12, color: "var(--text-2)" }}>Recupera {listaTributos(t).join(", ")}</div>}</td>
                 <td><Situacao ativo={t.ativo} /></td>
                 <td className="acoes"><BotaoEditar rotulo={t.nome} onClick={() => setEditando(t)} /></td>
               </tr>
@@ -71,6 +79,18 @@ function TipoForm({ tipo, contas, onFechar, onSalvo }) {
     nome: tipo?.nome ?? "", descricao: tipo?.descricao ?? "", ativo: tipo?.ativo ?? true,
     contaDebitoId: tipo ? String(tipo.conta_debito_id) : "", contaCreditoId: tipo ? String(tipo.conta_credito_id) : "",
   });
+  const [recuperar, setRecuperar] = useState(() => listaTributos(tipo).length > 0);
+  const [tribs, setTribs] = useState(() => Object.fromEntries(Object.entries(tipo?.tributos_recuperar ?? {}).map(([k, v]) => [k, String(v)])));
+  const contasAtivo = contas.filter((c) => c.analitica && c.natureza === "ativo" && (c.ativo || Object.values(tribs).includes(String(c.id))))
+    .sort((a, b) => a.codigo.localeCompare(b.codigo, "pt-BR", { numeric: true }));
+  function marcarTributo(t, sim) {
+    setTribs((p) => {
+      const n = { ...p };
+      if (sim) n[t.id] = String(contasAtivo.find((c) => c.codigo === t.codigo)?.id ?? "");
+      else delete n[t.id];
+      return n;
+    });
+  }
   const [tentou, setTentou] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
@@ -85,13 +105,16 @@ function TipoForm({ tipo, contas, onFechar, onSalvo }) {
   if (!f.contaDebitoId) erros.contaDebitoId = "Escolha a conta de débito";
   if (!f.contaCreditoId) erros.contaCreditoId = "Escolha a conta de crédito";
   else if (f.contaDebitoId === f.contaCreditoId) erros.contaCreditoId = "Débito e crédito precisam ser contas diferentes";
+  if (recuperar && Object.keys(tribs).length === 0) erros.tribs = "Marque ao menos um tributo, ou desmarque a opção";
+  else if (recuperar && Object.values(tribs).some((v) => !v)) erros.tribs = "Escolha a conta de cada tributo marcado";
 
   async function salvar() {
     setTentou(true);
     setErro("");
     if (Object.keys(erros).length) return;
     setSalvando(true);
-    try { await salvarTipoContabil(tipo?.id ?? null, f); await onSalvo(); }
+    const tributosRecuperar = recuperar ? Object.fromEntries(Object.entries(tribs).map(([k, v]) => [k, Number(v)])) : {};
+    try { await salvarTipoContabil(tipo?.id ?? null, { ...f, tributosRecuperar }); await onSalvo(); }
     catch (e) { setErro(mensagemErro(e)); setSalvando(false); }
   }
 
@@ -119,6 +142,32 @@ function TipoForm({ tipo, contas, onFechar, onSalvo }) {
 
       {seletor("contaDebitoId", "tc-debito", "Conta de débito", opcoesDebito, "Onde o gasto é registrado: despesa (consumo) ou ativo (estoque, imobilizado).")}
       {seletor("contaCreditoId", "tc-credito", "Conta de crédito", opcoesCredito, "De onde sai o valor: Caixa/Bancos (ativo) ou Fornecedores a pagar (passivo).")}
+      <label style={{ display: "flex", alignItems: "flex-start", gap: 8, marginTop: 18, fontSize: 13.5 }}>
+        <input type="checkbox" checked={recuperar} onChange={(e) => setRecuperar(e.target.checked)} style={{ marginTop: 3 }} />
+        <span><strong>Contabilizar tributos a recuperar</strong>
+          <span className="muted" style={{ display: "block", fontSize: 12.5 }}>Para quando a igreja aproveita crédito dos impostos da compra. O valor do tributo marcado, destacado no item da nota, sai do custo e vai para a conta escolhida. Ex.: item de R$ 100 com ICMS de R$ 18 → R$ 82 na conta de débito e R$ 18 em “ICMS a recuperar”. Desmarcado, o valor inteiro vai para a conta de débito.</span>
+        </span>
+      </label>
+      {recuperar && (
+        <div className="painel" style={{ marginTop: 10 }}>
+          {TRIBUTOS.map((t) => (
+            <div key={t.id} style={{ display: "grid", gridTemplateColumns: "110px minmax(0, 1fr)", gap: 10, alignItems: "center", marginBottom: 8 }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13.5, fontWeight: 600 }}>
+                <input type="checkbox" checked={t.id in tribs} onChange={(e) => marcarTributo(t, e.target.checked)} /> {t.rotulo}
+              </label>
+              {t.id in tribs ? (
+                <select style={{ ...inp, ...(tentou && !tribs[t.id] ? { borderColor: "var(--danger)" } : {}) }} value={tribs[t.id]}
+                  onChange={(e) => setTribs((p) => ({ ...p, [t.id]: e.target.value }))} aria-label={`Conta do ${t.rotulo} a recuperar`}>
+                  <option value="">— Conta do {t.rotulo} a recuperar —</option>
+                  {contasAtivo.map((c) => <option key={c.id} value={c.id}>{c.codigo} — {c.nome}{c.ativo ? "" : " (inativa)"}</option>)}
+                </select>
+              ) : <span className="muted" style={{ fontSize: 12.5 }}>fica no custo</span>}
+            </div>
+          ))}
+          <div className="muted" style={{ fontSize: 12.5 }}>CBS e IBS são os tributos da reforma tributária. Se os tributos marcados passarem do valor do item, nada é separado naquele item.</div>
+          {tentou && erros.tribs && <div style={msgErro}>{erros.tribs}</div>}
+        </div>
+      )}
       <CampoAtivo ativo={f.ativo} onChange={(v) => setF((p) => ({ ...p, ativo: v }))} dica="tipos inativos não podem ser escolhidos em novas notas" />
       <div className="muted" style={{ fontSize: 12.5, marginTop: 10 }}>
         Mudar as contas de um tipo vale para notas novas; itens de notas já lançadas guardam as contas da época.

@@ -84,6 +84,17 @@ function fiscalDoItem(det, prod) {
   const ipi = achar(imposto, "IPI");
   num("ipi_aliquota", ipi, "pIPI"); num("ipi", ipi, "vIPI");
   num("pis", achar(imposto, "PIS"), "vPIS"); num("cofins", achar(imposto, "COFINS"), "vCOFINS");
+  // Reforma tributária (NT 2025.002): grupo IBSCBS com IBS da UF + do município e CBS
+  const ibscbs = achar(achar(imposto, "IBSCBS"), "gIBSCBS");
+  if (ibscbs) {
+    num("ibs_cbs_base", ibscbs, "vBC");
+    const pIbs = (Number(texto(achar(ibscbs, "gIBSUF"), "pIBSUF")) || 0) + (Number(texto(achar(ibscbs, "gIBSMun"), "pIBSMun")) || 0);
+    if (pIbs > 0) f.ibs_aliquota = Math.round(pIbs * 10000) / 10000;
+    const vIbs = Number(texto(ibscbs, "vIBS")) || (Number(texto(achar(ibscbs, "gIBSUF"), "vIBSUF")) || 0) + (Number(texto(achar(ibscbs, "gIBSMun"), "vIBSMun")) || 0);
+    if (vIbs > 0) f.ibs = Math.round(vIbs * 100) / 100;
+    const gCbs = achar(ibscbs, "gCBS");
+    num("cbs_aliquota", gCbs, "pCBS"); num("cbs", gCbs, "vCBS");
+  }
   return f;
 }
 
@@ -173,6 +184,12 @@ export function lerNfeXml(conteudo, parseXml = analisarXml) {
   numero_("icms_st_base", cent(tot, "vBCST")); numero_("icms_st", cent(tot, "vST"));
   numero_("ipi", cent(tot, "vIPI")); numero_("pis", cent(tot, "vPIS")); numero_("cofins", cent(tot, "vCOFINS"));
   numero_("total_tributos", cent(tot, "vTotTrib"));
+  const totRef = achar(achar(inf, "total"), "IBSCBSTot");
+  if (totRef) {
+    numero_("ibs_cbs_base", cent(totRef, "vBCIBSCBS"));
+    numero_("ibs", cent(achar(totRef, "gIBS"), "vIBS"));
+    numero_("cbs", cent(achar(totRef, "gCBS"), "vCBS"));
+  }
   const nProt = texto(protocolo, "nProt");
   if (nProt) fiscal.protocolo = nProt.slice(0, 60);
 

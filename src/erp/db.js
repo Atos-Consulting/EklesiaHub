@@ -246,9 +246,11 @@ export const salvarCentroCusto = (id, { nome, ativo }) => gravar("centros_custo"
 export const salvarContaContabil = (id, { codigo, nome, natureza, analitica, paiId, ativo }) =>
   gravar("plano_contas", id, { codigo: codigo.trim(), nome: nome.trim(), natureza, analitica, pai_id: paiId || null, ativo });
 
-export const salvarTipoContabil = (id, { nome, descricao, contaDebitoId, contaCreditoId, ativo }) =>
+// tributosRecuperar (v28): { icms: idConta, cbs: idConta, ... } — vazio = o item inteiro vai para a conta de débito.
+export const salvarTipoContabil = (id, { nome, descricao, contaDebitoId, contaCreditoId, ativo, tributosRecuperar }) =>
   gravar("tipos_contabeis", id, {
     nome: nome.trim(), descricao: descricao.trim() || null, conta_debito_id: Number(contaDebitoId), conta_credito_id: Number(contaCreditoId), ativo,
+    ...(tributosRecuperar ? { tributos_recuperar: tributosRecuperar } : {}),
   });
 
 export const salvarContaCaixa = (id, { nome, banco, agencia, numeroConta, saldoInicial, dataSaldoInicial, contaContabilId, ativo }) =>

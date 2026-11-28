@@ -67,6 +67,11 @@ O EklesiaHub hoje é **só um ERP multiempresa de igreja** (o `README.md` ainda 
 - **Guias a recolher**: as retenções de cada tributo, somadas por mês de emissão da nota, viram uma conta a pagar ao órgão (`titulos_financeiros.tributo_retido` + `competencia`), refeita por `recalcular_guia` quando uma nota é aprovada ou cancelada (gatilho em `documentos_entrada`) e quando o órgão é escolhido. Guia já paga + retenção nova = guia complementar; retenção cancelada = guia em aberto cancelada. Guia não se cancela nem muda de valor à mão (gatilho). Órgão e dia de vencimento (mês seguinte) em `tributos_guias` (Parâmetros → Regras de contabilização, seção Guias): padrão Receita Federal dia 20 para os federais e ISS dia 10 sem órgão (sem órgão, não gera). A guia não gera despesa: o pagamento baixa a conta do tributo.
 - Relatório Contábil → Retenções (`contabil/Retencoes.jsx`, `retencoes_mes(mes)`): notas do mês com cada tributo retido e as guias da competência.
 
+### Tributos a recuperar e IBS/CBS (v28)
+
+- Nota e item têm IBS e CBS da reforma tributária (`ibs_cbs_base`, `cbs_aliquota`, `cbs`, `ibs_aliquota`, `ibs`), lidos do XML (grupo `IBSCBS` do item e `IBSCBSTot`) por `nfe.js`.
+- Tipo contábil com **tributos a recuperar** (`tipos_contabeis.tributos_recuperar` = `{ tributo: conta }`, para icms, ipi, pis, cofins, iss, cbs, ibs; contas analíticas do ativo, plano padrão 1.1.05 a 1.1.11): o valor do tributo no item sai do custo e vai para a conta. O item guarda as contas na gravação (`documento_entrada_itens.tributos_contas`). Se os tributos marcados passarem do valor do item, nada é separado (`tributos_recuperar_item()`). O custo do estoque (v27) também sai sem eles.
+
 ### Comercial: frente de loja, produtos e estoque (v27)
 
 - Módulo Comercial (`src/erp/comercial/`): **Frente de loja** (`FrenteLoja.jsx`, rota `#/comercial/frente/<id do caixa>`), **Caixas** e **Vendas** (`CaixasPdv.jsx`), **Produtos** (`Produtos.jsx`); contas puras em `calculoPdv.js` (o banco refaz tudo em `registrar_venda`).
@@ -91,7 +96,7 @@ O catálogo fica em `src/erp/catalogoParametros.js`. **Não** chame o arquivo de
 
 ## Migrations
 
-Arquivos SQL soltos na raiz, rodados **à mão no SQL Editor** em ordem: `schema.sql` → `migration_v2` → `v3` (Kids) → `v4_erp` → `v5_multiempresa` → `v6_parametros_fiscal` → `v7_niveis_usuarios` → `v8_financeiro` → `v9_trocar_empresa` → `v10_cadastro_logs` → `v11_contabilidade_opcional` → `v12_entradas` → `v13_movimentos_caixa` → `v14_contas_receber` → `v15_centro_custo_obrigatorio` → `v16_entradas_usuario` → `v17_centro_custo_itens` → `v18_formas_pagamento` → `v19_conciliacao_caixa` → `v20_contas_fixas` → `v21_pagamento_comprovantes` → `v22_identidade_igreja` → `v23_orcamento` → `v24_fechamento_mes` → `v25_contabilidade` → `v26_tributos_retidos` → `v27_comercial`. Não presuma que a última já foi aplicada no banco real. A UI que depende dela quebra até ser aplicada. Teste migrations novas com dados legados já aprovados, porque os gatilhos de imutabilidade podem barrar o backfill.
+Arquivos SQL soltos na raiz, rodados **à mão no SQL Editor** em ordem: `schema.sql` → `migration_v2` → `v3` (Kids) → `v4_erp` → `v5_multiempresa` → `v6_parametros_fiscal` → `v7_niveis_usuarios` → `v8_financeiro` → `v9_trocar_empresa` → `v10_cadastro_logs` → `v11_contabilidade_opcional` → `v12_entradas` → `v13_movimentos_caixa` → `v14_contas_receber` → `v15_centro_custo_obrigatorio` → `v16_entradas_usuario` → `v17_centro_custo_itens` → `v18_formas_pagamento` → `v19_conciliacao_caixa` → `v20_contas_fixas` → `v21_pagamento_comprovantes` → `v22_identidade_igreja` → `v23_orcamento` → `v24_fechamento_mes` → `v25_contabilidade` → `v26_tributos_retidos` → `v27_comercial` → `v28_tributos_recuperar`. Não presuma que a última já foi aplicada no banco real. A UI que depende dela quebra até ser aplicada. Teste migrations novas com dados legados já aprovados, porque os gatilhos de imutabilidade podem barrar o backfill.
 
 ## BMAD
 

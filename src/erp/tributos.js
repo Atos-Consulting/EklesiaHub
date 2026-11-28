@@ -29,6 +29,11 @@ export const GRUPOS_TRIBUTOS_NOTA = [
     { chave: "iss_aliquota", rotulo: "Alíquota do ISS", percentual: true },
     { chave: "iss", rotulo: "ISS" },
   ], marcas: [{ chave: "iss_retido", rotulo: "ISS retido pelo tomador" }] },
+  { titulo: "IBS e CBS (reforma tributária)", campos: [
+    { chave: "ibs_cbs_base", rotulo: "Base de cálculo do IBS/CBS" },
+    { chave: "cbs", rotulo: "CBS" },
+    { chave: "ibs", rotulo: "IBS" },
+  ] },
   { titulo: "Retenções", campos: [
     { chave: "inss", rotulo: "INSS retido", retencao: true },
     { chave: "irrf", rotulo: "IRRF retido", retencao: true },
@@ -66,6 +71,13 @@ export const GRUPOS_TRIBUTOS_ITEM = [
     { chave: "cofins_aliquota", rotulo: "Alíquota COFINS", percentual: true },
     { chave: "cofins", rotulo: "COFINS" },
   ] },
+  { titulo: "IBS e CBS (reforma tributária)", campos: [
+    { chave: "ibs_cbs_base", rotulo: "Base IBS/CBS" },
+    { chave: "cbs_aliquota", rotulo: "Alíquota CBS", percentual: true },
+    { chave: "cbs", rotulo: "CBS" },
+    { chave: "ibs_aliquota", rotulo: "Alíquota IBS", percentual: true },
+    { chave: "ibs", rotulo: "IBS" },
+  ] },
   { titulo: "Serviços e retenções", campos: [
     { chave: "iss_aliquota", rotulo: "Alíquota ISS", percentual: true },
     { chave: "iss", rotulo: "ISS" },
@@ -75,7 +87,7 @@ export const GRUPOS_TRIBUTOS_ITEM = [
   ] },
 ];
 
-const CHAVES_SOMAVEIS = ["icms_base", "icms", "icms_st_base", "icms_st", "ipi_base", "ipi", "pis", "cofins", "iss", "inss", "irrf", "csll"];
+const CHAVES_SOMAVEIS = ["icms_base", "icms", "icms_st_base", "icms_st", "ipi_base", "ipi", "pis", "cofins", "iss", "inss", "irrf", "csll", "ibs_cbs_base", "cbs", "ibs"];
 
 // Lê um objeto { chave: "texto digitado" } e devolve só o que tem valor, no formato do banco.
 // Números: > 0 (zero e vazio são omitidos). Textos: não vazios. Marcas: só quando verdadeiras.
