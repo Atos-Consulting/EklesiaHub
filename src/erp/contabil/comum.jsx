@@ -10,6 +10,7 @@ import { ORIGENS, rotuloConta } from "./calculoContabil";
 const ROTA_ORIGEM = {
   abertura: "#/parametros/caixas", nota: "#/administrativo/notas", titulo_pagar: "#/financeiro/lancamentos/pagar",
   titulo_receber: "#/financeiro/lancamentos/receber", pagamento: "#/financeiro/lancamentos/pagar", entrada: "#/financeiro/entradas", movimento: "#/financeiro/caixa/extrato",
+  caixa_pdv: "#/comercial/caixas", estoque: "#/comercial/produtos",
 };
 
 // Eventos que ainda não entraram no diário porque falta alguma conta.

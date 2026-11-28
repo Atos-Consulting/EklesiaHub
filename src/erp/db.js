@@ -25,6 +25,11 @@ export function mensagemErro(e) {
   if (msg.includes("contas_fixas_centro_ck")) return "Conta fixa a pagar precisa de centro de custo.";
   if (msg.includes("contas_fixas_periodo_ck")) return "O mês final não pode ser antes do mês inicial.";
   if (msg.includes("titulos_financeiros_conta_fixa_fk")) return "Esta conta fixa já gerou lançamentos e não pode ser excluída. Desative-a.";
+  if (msg.includes("caixas_pdv_aberto_uq")) return "Já existe um caixa aberto neste local. Feche-o antes de abrir outro.";
+  if (msg.includes("pontos_venda_empresa_nome_uq")) return "Já existe um local de venda com este nome.";
+  if (msg.includes("produtos_empresa_codigo_uq")) return "Já existe um produto com este código.";
+  if (/(caixas_pdv_ponto|pontos_venda_caixa|pontos_venda_eletronica)_fk/.test(msg) && e?.code === "23503") return "Este local já tem caixas e não pode ser excluído. Desative-o.";
+  if (/(venda_itens|estoque_movimentos|documento_entrada_itens)_produto_fk/.test(msg)) return "Este produto já foi vendido ou comprado e não pode ser excluído. Desative-o.";
   if (msg.includes("campanhas_empresa_nome_uq")) return "Já existe uma campanha com este nome.";
   if (msg.includes("campanhas_periodo_ck")) return "A data de fim da campanha não pode ser antes do início.";
   if (msg.includes("entradas_campanha_fk")) return "Esta campanha já recebeu entradas e não pode ser excluída. Desative-a.";
@@ -45,7 +50,7 @@ export function mensagemErro(e) {
 // ── Cadastros-base ───────────────────────────────────────────────
 
 export async function fetchCadastros() {
-  const [contas, centros, fundos, pessoas, parametros, tipos, caixas, condicoes, campanhas, formas] = await Promise.all([
+  const [contas, centros, fundos, pessoas, parametros, tipos, caixas, condicoes, campanhas, formas, produtos, pontos] = await Promise.all([
     supabase.from("plano_contas").select("id,codigo,nome,natureza,analitica,pai_id,ativo").order("codigo"),
     supabase.from("centros_custo").select("id,nome,ativo").order("nome"),
     supabase.from("fundos").select("id,nome,restrito,ativo").order("nome"),
@@ -56,12 +61,15 @@ export async function fetchCadastros() {
     supabase.from("condicoes_pagamento").select("*").order("nome"),
     supabase.from("campanhas_saldo").select("*").order("nome"),
     supabase.from("formas_pagamento").select("*").order("nome"),
+    supabase.from("produtos").select("id,nome,codigo,unidade,controla_estoque,ativo").order("nome"),
+    supabase.from("pontos_venda").select("*").order("nome"),
   ]);
-  const erro = [contas, centros, fundos, pessoas, parametros, tipos, caixas, condicoes, campanhas, formas].find((r) => r.error)?.error;
+  const erro = [contas, centros, fundos, pessoas, parametros, tipos, caixas, condicoes, campanhas, formas, produtos, pontos].find((r) => r.error)?.error;
   if (erro) throw erro;
   return {
     contas: contas.data, centros: centros.data, fundos: fundos.data, pessoas: pessoas.data,
     tipos: tipos.data, caixas: caixas.data, condicoes: condicoes.data, campanhas: campanhas.data, formas: formas.data,
+    produtos: produtos.data, pontos: pontos.data,
     // { chave: valor } — ex.: { "nota.numero_tamanho.nfe": "9" }
     parametros: Object.fromEntries(parametros.data.map((p) => [p.chave, p.valor])),
   };
@@ -256,6 +264,13 @@ export const salvarCondicaoPagamento = (id, { nome, tipo, formaPagamento, parcel
   gravar("condicoes_pagamento", id, {
     nome: nome.trim(), tipo, forma_pagamento: null, forma_pagamento_id: formaPagamento ? Number(formaPagamento) : null,
     parcelas: tipo === "a_vista" ? 1 : parcelas, dias_primeira: tipo === "a_vista" ? 0 : diasPrimeira, intervalo_dias: intervaloDias, ativo,
+  });
+
+// Locais de venda do frente de loja (v27).
+export const salvarPontoVenda = (id, { nome, contaCaixaId, contaEletronicaId, centroCustoId, ativo }) =>
+  gravar("pontos_venda", id, {
+    nome: nome.trim(), conta_caixa_id: Number(contaCaixaId), conta_eletronica_id: contaEletronicaId ? Number(contaEletronicaId) : null,
+    centro_custo_id: centroCustoId ? Number(centroCustoId) : null, ativo,
   });
 
 export const salvarCampanha = (id, { nome, descricao, meta, dataInicio, dataFim, ativo }) =>
@@ -887,4 +902,86 @@ export async function carregarExportacao(contaIds, { de, ate }) {
     })),
   ]);
   return { extrato: extrato.map((l) => ({ ...l, valor: Number(l.valor) })), pagos, recebidos, entradas, movimentos, saldos };
+}
+
+// ── Comercial: frente de loja, produtos e estoque (v27) ──────────
+
+const rpc = async (nome, args) => {
+  const { data, error } = await supabase.rpc(nome, args);
+  if (error) throw error;
+  return data;
+};
+
+// Acessos de um usuário aos locais de venda (cadastro do usuário). Sem userId: os do próprio usuário.
+export async function listarAcessosPdv(userId) {
+  const { data, error } = await supabase.from("pontos_venda_usuarios").select("ponto_venda_id,user_id,pode_abrir,pode_vender").eq("user_id", userId);
+  if (error) throw error;
+  return data;
+}
+export async function listarPontosVenda() {
+  const { data, error } = await supabase.from("pontos_venda").select("*").order("nome");
+  if (error) throw error;
+  return data;
+}
+export async function listarTodosAcessosPdv() {
+  const { data, error } = await supabase.from("pontos_venda_usuarios").select("ponto_venda_id,user_id,pode_abrir,pode_vender");
+  if (error) throw error;
+  return data;
+}
+export const salvarAcessosPdv = (userId, acessos) => rpc("salvar_acessos_pdv", { p_user: userId, p_acessos: acessos });
+
+export async function listarProdutos() {
+  const { data, error } = await supabase.from("produtos_estoque").select("*").order("nome");
+  if (error) throw error;
+  return data;
+}
+export const salvarProduto = (id, p) =>
+  gravar("produtos", id, {
+    nome: p.nome.trim(), codigo: p.codigo.trim() || null, categoria: p.categoria.trim() || null, unidade: p.unidade.trim() || "UN",
+    preco: p.preco, controla_estoque: p.controlaEstoque, estoque_minimo: p.controlaEstoque ? p.estoqueMinimo : null,
+    pontos_venda: p.pontosVenda, ativo: p.ativo,
+  });
+export async function listarMovimentosEstoque(produtoId) {
+  const { data, error } = await supabase.from("estoque_movimentos").select("*").eq("produto_id", produtoId)
+    .order("data", { ascending: false }).order("id", { ascending: false }).limit(300);
+  if (error) throw error;
+  return data;
+}
+export const ajustarEstoque = (produtoId, data, quantidade, custoUnitario, motivo) =>
+  rpc("ajustar_estoque", { p_produto: produtoId, p_data: data, p_quantidade: quantidade, p_custo_unitario: custoUnitario, p_motivo: motivo });
+
+// Caixas: abertos (para vender) ou de um período (histórico).
+export async function listarCaixasPdv({ abertos = false, de, ate, pontoId } = {}) {
+  let c = supabase.from("caixas_pdv").select("*").order("data", { ascending: false }).order("id", { ascending: false });
+  if (abertos) c = c.eq("status", "aberto");
+  if (de) c = c.gte("data", de);
+  if (ate) c = c.lte("data", ate);
+  if (pontoId) c = c.eq("ponto_venda_id", pontoId);
+  const { data, error } = await c.limit(500);
+  if (error) throw error;
+  return data;
+}
+export const abrirCaixaPdv = (pontoId, data, troco, observacao) =>
+  rpc("abrir_caixa_pdv", { p_ponto: pontoId, p_data: data, p_troco: troco, p_observacao: observacao || null });
+export const resumoCaixaPdv = (caixaId) => rpc("resumo_caixa_pdv", { p_caixa: caixaId });
+export const fecharCaixaPdv = (caixaId, contado, observacao) =>
+  rpc("fechar_caixa_pdv", { p_caixa: caixaId, p_dinheiro_contado: contado, p_observacao: observacao || null });
+export const registrarVenda = (caixaId, itens, pagamentos, desconto, pessoaId, observacao) =>
+  rpc("registrar_venda", { p_caixa: caixaId, p_itens: itens, p_pagamentos: pagamentos, p_desconto: desconto, p_pessoa: pessoaId || null, p_observacao: observacao || null });
+// Registra e devolve o número da venda no caixa (para a confirmação na tela).
+export async function registrarVendaComNumero(caixaId, itens, pagamentos, desconto) {
+  const id = await registrarVenda(caixaId, itens, pagamentos, desconto, null, null);
+  const { data } = await supabase.from("vendas").select("numero").eq("id", id).maybeSingle();
+  return data?.numero ?? id;
+}
+export const cancelarVenda = (vendaId, motivo) => rpc("cancelar_venda", { p_venda: vendaId, p_motivo: motivo });
+
+// Vendas de um ou mais caixas, com itens e pagamentos.
+export async function listarVendas(caixaIds) {
+  if (!caixaIds.length) return [];
+  const { data, error } = await supabase.from("vendas")
+    .select("*, venda_itens!venda_itens_venda_fk(id,produto_id,descricao,quantidade,preco_unitario,total), venda_pagamentos!venda_pagamentos_venda_fk(id,forma_pagamento_id,valor,valor_recebido)")
+    .in("caixa_id", caixaIds).order("id", { ascending: false });
+  if (error) throw error;
+  return data;
 }

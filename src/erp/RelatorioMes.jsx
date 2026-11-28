@@ -17,7 +17,7 @@ const MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julh
 const TRANSFERENCIAS = new Set(["transferencia_saida", "transferencia_entrada"]);
 const SEM_CENTRO = "sem";
 const MAX_FORNECEDORES = 5;
-const ORDEM_ENTRADA = { dizimo: 1, oferta: 2, campanha: 3, recebimento: 4, entrada_avulsa: 5, outra: 6 };
+const ORDEM_ENTRADA = { dizimo: 1, oferta: 2, campanha: 3, recebimento: 4, venda_pdv: 5, entrada_avulsa: 6, outra: 7 };
 
 const nomeMes = (ym) => `${MESES[Number(ym.slice(5, 7)) - 1]} de ${ym.slice(0, 4)}`;
 const primeiroDia = (ym) => `${ym}-01`;
@@ -47,6 +47,9 @@ function resumir(linhas, lk) {
       else somaEm(entradas, tipo, { ordem: ORDEM_ENTRADA[tipo] ?? 9, rotulo: { dizimo: "Dízimos", oferta: "Ofertas", outra: "Outras entradas" }[tipo] ?? tipo }, c);
     } else if (l.origem === "recebimento") {
       somaEm(entradas, "recebimento", { ordem: ORDEM_ENTRADA.recebimento, rotulo: "Recebimentos (aluguéis, vendas e outras contas a receber)" }, c);
+    } else if (l.origem === "venda_pdv" || (l.origem === "diferenca_caixa" && c > 0)) {
+      // frente de loja (v27): vendas e sobras de caixa juntas
+      somaEm(entradas, "venda_pdv", { ordem: ORDEM_ENTRADA.venda_pdv, rotulo: "Vendas do frente de loja (cafeteria, livraria, bazar)" }, c);
     } else if (l.origem === "entrada_avulsa") {
       somaEm(entradas, "entrada_avulsa", { ordem: ORDEM_ENTRADA.entrada_avulsa, rotulo: "Entradas avulsas" }, c);
     } else if (c < 0) {

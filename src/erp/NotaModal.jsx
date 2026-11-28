@@ -25,7 +25,7 @@ import {
 
 const itemVazio = () => ({
   chave: crypto.randomUUID(), descricao: "", quantidade: "1", valorUnitario: "", valorTotal: "",
-  tipoId: "", centroCustoId: "", fiscal: {}, aberto: false,
+  tipoId: "", centroCustoId: "", produtoId: "", fiscal: {}, aberto: false,
 });
 const itemEmBranco = (i) => !i.descricao.trim() && !i.valorUnitario.trim() && !i.valorTotal.trim() && !i.tipoId;
 const limparChave = (v) => String(v || "").toUpperCase().replace(/[^0-9A-Z]/g, "").slice(0, 44);
@@ -92,6 +92,7 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
           chave: crypto.randomUUID(), descricao: i.descricao, quantidade: campoTexto(Number(i.quantidade)),
           valorUnitario: numeroParaCampo(Number(i.valor_unitario)), valorTotal: numeroParaCampo(Number(i.valor_total)),
           tipoId: i.tipo_contabil_id ? String(i.tipo_contabil_id) : "",
+          produtoId: i.produto_id ? String(i.produto_id) : "",
           centroCustoId: String(i.centro_custo_id ?? n.centro_custo_id ?? ""), // antes da v17 o centro ficava no cabeçalho
           fiscal: fiscalDoBanco(i.fiscal), aberto: false,
         }))
@@ -256,6 +257,7 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
       itens: itensAtivos.map((i) => ({
         descricao: i.descricao.trim(), quantidade: lerNumero(i.quantidade), valor_unitario: lerNumero(i.valorUnitario),
         valor_total: lerNumero(i.valorTotal), tipo_contabil_id: i.tipoId ? Number(i.tipoId) : null, centro_custo_id: i.centroCustoId ? Number(i.centroCustoId) : null,
+        produto_id: i.produtoId ? Number(i.produtoId) : null,
         fiscal: fiscalParaBanco(i.fiscal, { numeros: chavesNumericasItem, textos: chavesTextoItem }),
       })),
     };
@@ -340,7 +342,23 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
   const estiloCampo = (k) => ({ ...inp, ...borda(k) });
   const somenteLeitura = { ...inp, background: "var(--surface-2)", textAlign: "right", fontWeight: 600 };
   const titulo = novo ? "Nova nota de entrada" : `${TIPOS_NOTA[form.tipo] || "Nota"} ${form.numero}${form.serie ? `/${form.serie}` : ""}`;
-  const colunas = "minmax(150px,2fr) 64px 96px 100px minmax(170px,2fr) minmax(110px,1fr) 96px 32px";
+  // Produto com estoque (v27): a coluna só aparece quando a igreja tem produto que controla estoque.
+  const produtosEstoque = (cadastros.produtos ?? []).filter((pr) => pr.controla_estoque && (pr.ativo || itens.some((i) => i.produtoId === String(pr.id))));
+  const comProduto = produtosEstoque.length > 0 || itens.some((i) => i.produtoId);
+  const colunas = comProduto
+    ? "minmax(150px,2fr) minmax(130px,1.3fr) 64px 96px 100px minmax(170px,2fr) minmax(110px,1fr) 96px 32px"
+    : "minmax(150px,2fr) 64px 96px 100px minmax(170px,2fr) minmax(110px,1fr) 96px 32px";
+  // Ao ligar o item a um produto: descrição do produto se estiver vazia e, sem tipo, o tipo que debita o estoque (1.1.03).
+  const contaEstoque = cadastros.contas.find((c) => c.codigo === "1.1.03")?.id;
+  const tipoEstoque = cadastros.tipos.find((tp) => tp.ativo && tp.conta_debito_id === contaEstoque);
+  function escolherProduto(item, produtoId) {
+    const pr = produtosEstoque.find((x) => String(x.id) === produtoId);
+    atualizarItem(item.chave, {
+      produtoId,
+      ...(pr && !item.descricao.trim() ? { descricao: pr.nome } : {}),
+      ...(pr && !item.tipoId && tipoEstoque ? { tipoId: String(tipoEstoque.id) } : {}),
+    });
+  }
   const tiposAtivos = cadastros.tipos.filter((t) => t.ativo);
 
   const rodape = carregando ? null : (
@@ -474,9 +492,9 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
           )}
           {mostrar("itensVazios") && <div style={msgErro}>{erros.itensVazios}</div>}
           <div style={{ overflowX: "auto", paddingBottom: 4 }}>
-            <div style={{ minWidth: 900 }}>
+            <div style={{ minWidth: comProduto ? 1040 : 900 }}>
               <div className="itens-cabecalho" style={{ display: "grid", gridTemplateColumns: colunas, gap: 6, margin: "4px 0 6px" }}>
-                <span>Descrição</span><span>Qtd.</span><span style={{ textAlign: "right" }}>Valor unit.</span><span style={{ textAlign: "right" }}>Total</span><span>Tipo contábil{!contabil && " (opcional)"}</span><span>Centro de custo{podeAprovar ? " *" : ""}</span><span>Tributos</span><span />
+                <span>Descrição</span>{comProduto && <span title="Ligue o item a um produto com estoque: ao aprovar a nota, a quantidade entra no estoque">Produto (estoque)</span>}<span>Qtd.</span><span style={{ textAlign: "right" }}>Valor unit.</span><span style={{ textAlign: "right" }}>Total</span><span>Tipo contábil{!contabil && " (opcional)"}</span><span>Centro de custo{podeAprovar ? " *" : ""}</span><span>Tributos</span><span />
               </div>
               {itens.map((i) => {
                 const e = erros.itens[i.chave] || {};
@@ -486,6 +504,13 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
                   <div key={i.chave} style={{ marginBottom: 6 }}>
                     <div style={{ display: "grid", gridTemplateColumns: colunas, gap: 6, alignItems: "center" }}>
                       <input style={{ ...estiloCampo(), ...b("descricao") }} value={i.descricao} onChange={(ev) => atualizarItem(i.chave, { descricao: ev.target.value })} {...desabilitado} aria-label="Descrição do item" />
+                      {comProduto && (
+                        <select style={estiloCampo()} value={i.produtoId} onChange={(ev) => escolherProduto(i, ev.target.value)} {...desabilitado}
+                          aria-label="Produto do estoque" title="Ao aprovar a nota, a quantidade deste item entra no estoque do produto">
+                          <option value="">— Sem estoque —</option>
+                          {produtosEstoque.map((pr) => <option key={pr.id} value={pr.id}>{pr.nome}{pr.codigo ? ` (${pr.codigo})` : ""}</option>)}
+                        </select>
+                      )}
                       <input style={{ ...estiloCampo(), ...b("quantidade"), textAlign: "right" }} inputMode="decimal" value={i.quantidade} onChange={(ev) => atualizarItem(i.chave, { quantidade: ev.target.value })} {...desabilitado} aria-label="Quantidade" />
                       <input style={{ ...estiloCampo(), ...b("valorUnitario"), textAlign: "right" }} inputMode="decimal" placeholder="0,00" value={i.valorUnitario} onChange={(ev) => atualizarItem(i.chave, { valorUnitario: ev.target.value })} {...desabilitado} aria-label="Valor unitário" />
                       <input style={{ ...somenteLeitura, ...b("valorTotal") }} readOnly tabIndex={-1} placeholder="0,00" value={i.valorTotal} aria-label="Valor total do item (calculado)" title="Quantidade × valor unitário" />

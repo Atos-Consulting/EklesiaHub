@@ -18,6 +18,9 @@ import FechamentoMes from "./FechamentoMes";
 import Diario from "./contabil/Diario";
 import { Razao, Balancete, Dre, Balanco } from "./contabil/Relatorios";
 import Retencoes from "./contabil/Retencoes";
+import FrenteLoja from "./comercial/FrenteLoja";
+import Produtos from "./comercial/Produtos";
+import { CaixasPdv, RelatorioVendas } from "./comercial/CaixasPdv";
 import InformeAnual from "./InformeAnual";
 import Logs from "./Logs";
 import Fornecedores from "./Fornecedores";
@@ -45,9 +48,9 @@ const MODULOS = [
     telas: [{ id: "painel", rotulo: "Painel" }, { id: "lancamentos", rotulo: "Lançamentos" }, { id: "entradas", rotulo: "Dízimos e ofertas" }, { id: "caixa", rotulo: "Caixa" }, { id: "orcamento", rotulo: "Orçamento" }] },
   { id: "contabil", grupo: "Gestão", rotulo: "Contábil", icone: "calculadora", pronto: true, contabil: true,
     telas: [{ id: "lancamentos", rotulo: "Lançamentos" }, { id: "razao", rotulo: "Razão" }, { id: "balancete", rotulo: "Balancete" }, { id: "dre", rotulo: "DRE" }, { id: "balanco", rotulo: "Balanço" }, { id: "retencoes", rotulo: "Retenções" }] },
-  { id: "comercial", grupo: "Gestão", rotulo: "Comercial", icone: "sacola", pronto: false,
-    descricao: "Livraria, bazar e demais vendas.",
-    previsto: ["Produtos e controle de estoque", "Vendas e ponto de venda (PDV)", "Compras via notas de entrada", "Custo das mercadorias vendidas"] },
+  // Frente de loja (v27): cafeteria, livraria, bazar... com caixa por local e dia, produtos e estoque.
+  { id: "comercial", grupo: "Gestão", rotulo: "Comercial", icone: "sacola", pronto: true,
+    telas: [{ id: "frente", rotulo: "Frente de loja" }, { id: "caixas", rotulo: "Caixas" }, { id: "vendas", rotulo: "Vendas" }, { id: "produtos", rotulo: "Produtos" }] },
   // Grupo Sistema, nesta ordem: Igrejas (administrador da plataforma), Usuários, Parâmetros e Logs (administrador da igreja).
   { id: "empresas", grupo: "Sistema", rotulo: "Igrejas", icone: "predio", pronto: true, visivel: (p) => p.plataforma },
   { id: "usuarios", grupo: "Sistema", rotulo: "Usuários", icone: "pessoas", pronto: true, visivel: (p) => p.gerirUsuarios },
@@ -170,7 +173,7 @@ export default function ErpApp({ perfil: perfilInicial, onSair, onEmpresaTrocada
 
   const modulo = visiveis.find((m) => m.id === rota.modulo) || visiveis.find((m) => m.pronto) || visiveis[0];
   const tela = modulo?.telas?.find((t) => t.id === rota.tela) || modulo?.telas?.[0];
-  const precisaCadastros = ["administrativo", "financeiro", "contabil", "parametros", "logs"].includes(modulo?.id);
+  const precisaCadastros = ["administrativo", "financeiro", "contabil", "comercial", "parametros", "logs"].includes(modulo?.id);
 
   useEffect(() => {
     document.title = `${[tela?.rotulo, modulo?.rotulo].filter(Boolean).join(" · ") || "ERP"} — EklesiaHub`;
@@ -216,6 +219,12 @@ export default function ErpApp({ perfil: perfilInicial, onSair, onEmpresaTrocada
     if (!cadastros) return <div className="carregando-linha"><div className="spinner" /> Carregando...</div>;
     if (modulo.id === "parametros") return <Parametros aba={tela?.id} perfil={perfil} cadastros={cadastros} onCadastrosMudaram={recarregarCadastros} onIdentidadeMudou={mudarIdentidade} />;
     if (modulo.id === "logs") return <Logs />;
+    if (modulo.id === "comercial") {
+      if (tela?.id === "produtos") return <Produtos cadastros={cadastros} podeEditar={perm.aprovar} />;
+      if (tela?.id === "caixas") return <CaixasPdv cadastros={cadastros} />;
+      if (tela?.id === "vendas") return <RelatorioVendas cadastros={cadastros} perfil={perfil} />;
+      return <FrenteLoja perfil={perfil} cadastros={cadastros} admin={perm.administrar} caixaRota={rota.aba} />;
+    }
     if (modulo.id === "contabil") {
       const p = { cadastros, perfil, podeConfigurar: perm.administrar };
       if (tela?.id === "razao") return <Razao {...p} />;

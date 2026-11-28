@@ -23,6 +23,13 @@ const REGRAS = [
     { chave: "ret_iss", rotulo: "ISS retido", naturezas: ["passivo"] },
     { chave: "retencoes", rotulo: "Outras retenções", ajuda: "O campo “Outras retenções” da nota.", naturezas: ["passivo"] },
   ] },
+  { grupo: "Comercial (frente de loja e estoque)", itens: [
+    { chave: "estoque", rotulo: "Estoque de mercadorias", ajuda: "Débito na compra (item da nota ligado a produto com estoque); crédito no custo da venda e nas perdas.", naturezas: ["ativo"] },
+    { chave: "vendas", rotulo: "Vendas", ajuda: "Crédito das vendas do frente de loja, no fechamento do caixa.", naturezas: ["receita"] },
+    { chave: "cmv", rotulo: "Custo das mercadorias vendidas", ajuda: "Débito do custo médio dos produtos vendidos.", naturezas: ["despesa"] },
+    { chave: "ajuste_estoque", rotulo: "Perdas e ajustes de estoque", ajuda: "Avarias, uso interno, doações recebidas e acertos de inventário.", naturezas: ["despesa"] },
+    { chave: "quebra_caixa", rotulo: "Quebra de caixa", ajuda: "Sobra ou falta do dinheiro no fechamento do caixa do frente de loja.", naturezas: ["despesa"] },
+  ] },
   { grupo: "Receitas", itens: [
     { chave: "dizimo", rotulo: "Dízimos", naturezas: ["receita"] },
     { chave: "oferta", rotulo: "Ofertas", naturezas: ["receita"] },

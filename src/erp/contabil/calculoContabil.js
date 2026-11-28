@@ -9,6 +9,7 @@ export const NATUREZAS = { ativo: "Ativo", passivo: "Passivo", patrimonio_social
 export const ORIGENS = {
   manual: "Manual", abertura: "Saldo inicial", nota: "Nota de entrada", titulo_pagar: "Conta a pagar",
   titulo_receber: "Conta a receber", pagamento: "Pagamento/recebimento", entrada: "Dízimo/oferta", movimento: "Movimento de caixa",
+  caixa_pdv: "Frente de loja", estoque: "Estoque",
 };
 
 export const moeda = (c) => formatarMoeda(deCentavos(c));

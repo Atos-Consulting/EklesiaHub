@@ -3,7 +3,7 @@ import { Header, Pill } from "../ui";
 import { lbl, inp, msgErro } from "../estilos";
 import Icone from "./Icone";
 import Modal from "./Modal";
-import { listarUsuarios, criarUsuario, atualizarUsuario, redefinirSenhaUsuario, mensagemErro } from "./db";
+import { listarUsuarios, criarUsuario, atualizarUsuario, redefinirSenhaUsuario, listarPontosVenda, listarTodosAcessosPdv, salvarAcessosPdv, mensagemErro } from "./db";
 import { NIVEIS, NIVEIS_ORDEM, rotuloNivel } from "./permissoes";
 import { gerarSenha, SENHA_MINIMA } from "./senha";
 import ThOrdenavel from "./ThOrdenavel";
@@ -39,8 +39,43 @@ function CampoSenha({ id, valor, onChange, erro }) {
   );
 }
 
-function UsuarioModal({ inicial, empresaId, souEu, niveisQueGere, onSalvo, onFechar }) {
+// Frente de loja (v27): em cada local de venda, o que a pessoa faz. O Administrador pode tudo em todos os locais.
+const ACESSO_PDV = { "": "Não usa", vender: "Vende", abrir: "Abre e fecha o caixa (e vende)" };
+const acessoDe = (a) => (a?.pode_abrir ? "abrir" : a?.pode_vender ? "vender" : "");
+const marcados = (m) => JSON.stringify(Object.entries(m).filter(([, a]) => a).sort());
+
+function AcessosPdv({ pontos, nivel, valor, onChange }) {
+  const ativos = pontos.filter((p) => p.ativo || valor[p.id]);
+  return (
+    <>
+      <h3 className="section-title" style={{ marginTop: 22 }}>Frente de loja</h3>
+      {nivel === "administrador" ? (
+        <div className="muted" style={{ fontSize: 12.5 }}>O Administrador abre e fecha o caixa e vende em todos os locais.</div>
+      ) : ativos.length === 0 ? (
+        <div className="muted" style={{ fontSize: 12.5 }}>Nenhum local de venda ativo.</div>
+      ) : (
+        <>
+          <div className="muted" style={{ fontSize: 12.5, marginBottom: 8 }}>O que esta pessoa faz em cada local. Quem abre e fecha o caixa também cancela venda do caixa aberto.</div>
+          <div className="pdv-acessos">
+            {ativos.map((p) => (
+              <label key={p.id} className="pdv-acesso">
+                <span>{p.nome}{p.ativo ? "" : " (inativo)"}</span>
+                <select style={{ ...inp, width: "auto", minWidth: 230 }} value={valor[p.id] ?? ""} onChange={(e) => onChange({ ...valor, [p.id]: e.target.value })}
+                  aria-label={`Frente de loja — ${p.nome}`}>
+                  {Object.entries(ACESSO_PDV).map(([k, r]) => <option key={k} value={k}>{r}</option>)}
+                </select>
+              </label>
+            ))}
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
+function UsuarioModal({ inicial, empresaId, souEu, niveisQueGere, pontos, acessosIniciais, onSalvo, onFechar }) {
   const novo = !inicial;
+  const [acessos, setAcessos] = useState(acessosIniciais);
   const [form, setForm] = useState(() => ({
     nome: inicial?.nome || "", email: inicial?.email || "", nivel: inicial?.nivel || "usuario",
     ativo: inicial?.ativo ?? true, senha: "",
@@ -63,8 +98,13 @@ function UsuarioModal({ inicial, empresaId, souEu, niveisQueGere, onSalvo, onFec
     if (Object.values(erros).some(Boolean)) return;
     setSalvando(true);
     try {
-      if (novo) await criarUsuario(empresaId, { nome: form.nome.trim(), email: form.email.trim(), senha: form.senha, nivel: form.nivel });
+      let id = inicial?.user_id;
+      if (novo) id = await criarUsuario(empresaId, { nome: form.nome.trim(), email: form.email.trim(), senha: form.senha, nivel: form.nivel });
       else await atualizarUsuario(inicial.user_id, { nome: form.nome.trim(), nivel: form.nivel, ativo: form.ativo });
+      if (form.nivel !== "administrador" && pontos.length && marcados(acessos) !== marcados(acessosIniciais)) {
+        await salvarAcessosPdv(id, Object.entries(acessos).filter(([, a]) => a)
+          .map(([pontoId, a]) => ({ ponto_venda_id: Number(pontoId), pode_abrir: a === "abrir", pode_vender: true })));
+      }
       onSalvo();
     } catch (e) {
       setErro(mensagemErro(e));
@@ -107,6 +147,8 @@ function UsuarioModal({ inicial, empresaId, souEu, niveisQueGere, onSalvo, onFec
           Usuário ativo (desativado não consegue entrar nem ver dados)
         </label>
       )}
+
+      {pontos.length > 0 && <AcessosPdv pontos={pontos} nivel={form.nivel} valor={acessos} onChange={setAcessos} />}
 
       {erro && <div className="alert alert-danger" role="alert" style={{ marginTop: 16 }}><Icone nome="alerta" tamanho={16} /><span>{erro}</span></div>}
     </Modal>
@@ -152,11 +194,22 @@ export default function Usuarios({ perfil, niveisQueGere }) {
   const [editando, setEditando] = useState(null); // null | "novo" | usuário
   const [senhaDe, setSenhaDe] = useState(null);
   const [aviso, setAviso] = useState("");
+  const [pontos, setPontos] = useState([]);
+  const [acessosPdv, setAcessosPdv] = useState([]);
 
-  const recarregar = useCallback(
-    () => listarUsuarios(perfil.empresa_id).then((d) => { setUsuarios(d); setErro(""); }).catch((e) => setErro(mensagemErro(e))),
-    [perfil.empresa_id],
-  );
+  const recarregar = useCallback(() => {
+    listarUsuarios(perfil.empresa_id).then((d) => { setUsuarios(d); setErro(""); }).catch((e) => setErro(mensagemErro(e)));
+    // frente de loja (v27): sem a migration no banco, a tela segue sem a seção
+    Promise.all([listarPontosVenda(), listarTodosAcessosPdv()])
+      .then(([p, a]) => { setPontos(p); setAcessosPdv(a); }).catch(() => { setPontos([]); setAcessosPdv([]); });
+  }, [perfil.empresa_id]);
+  const acessosDoUsuario = (userId) => Object.fromEntries(acessosPdv.filter((a) => a.user_id === userId).map((a) => [a.ponto_venda_id, acessoDe(a)]));
+  const nomePonto = Object.fromEntries(pontos.map((p) => [p.id, p.nome]));
+  const resumoPdv = (u) => {
+    if (u.nivel === "administrador") return pontos.length ? "Todos os locais" : "";
+    return acessosPdv.filter((a) => a.user_id === u.user_id)
+      .map((a) => `${nomePonto[a.ponto_venda_id] ?? "?"}${a.pode_abrir ? " (abre o caixa)" : ""}`).join(", ");
+  };
   useEffect(() => { recarregar(); }, [recarregar]);
 
   const filtrados = useMemo(() => {
@@ -209,11 +262,12 @@ export default function Usuarios({ perfil, niveisQueGere }) {
               <ThOrdenavel chave="email" ordenacao={ordenacao}>E-mail</ThOrdenavel>
               <ThOrdenavel chave="nivel" ordenacao={ordenacao}>Nível</ThOrdenavel>
               <ThOrdenavel chave="situacao" ordenacao={ordenacao}>Situação</ThOrdenavel>
+              {pontos.length > 0 && <th>Frente de loja</th>}
               <th />
             </tr></thead>
             <tbody>
-              {usuarios === null && !erro && <tr><td className="vazio" colSpan={5}>Carregando usuários...</td></tr>}
-              {usuarios && filtrados.length === 0 && <tr><td className="vazio" colSpan={5}>Nenhum usuário encontrado.</td></tr>}
+              {usuarios === null && !erro && <tr><td className="vazio" colSpan={pontos.length ? 6 : 5}>Carregando usuários...</td></tr>}
+              {usuarios && filtrados.length === 0 && <tr><td className="vazio" colSpan={pontos.length ? 6 : 5}>Nenhum usuário encontrado.</td></tr>}
               {ordenacao.ordenadas.map((u) => (
                 <tr key={u.user_id}>
                   <td className="truncate" style={{ fontWeight: 550 }}>
@@ -222,6 +276,7 @@ export default function Usuarios({ perfil, niveisQueGere }) {
                   <td className="muted">{u.email}</td>
                   <td><Pill tone={TOM_NIVEL[u.nivel]}>{rotuloNivel(u.nivel)}</Pill></td>
                   <td><Pill tone={u.ativo ? "ok" : "neutral"}>{u.ativo ? "Ativo" : "Inativo"}</Pill></td>
+                  {pontos.length > 0 && <td style={{ fontSize: 12.5, maxWidth: 260 }}>{resumoPdv(u) || <span className="muted">—</span>}</td>}
                   <td style={{ textAlign: "right" }}>
                     {podeGerir(u) ? (
                       <div style={{ display: "inline-flex", gap: 6 }}>
@@ -241,6 +296,7 @@ export default function Usuarios({ perfil, niveisQueGere }) {
       {editando && (
         <UsuarioModal inicial={editando === "novo" ? null : editando} empresaId={perfil.empresa_id}
           souEu={editando !== "novo" && editando.user_id === perfil.user_id} niveisQueGere={niveisQueGere}
+          pontos={pontos} acessosIniciais={editando === "novo" ? {} : acessosDoUsuario(editando.user_id)}
           onSalvo={() => depoisDeSalvar(editando === "novo" ? "Usuário criado. Repasse a senha inicial a ele." : "Usuário atualizado.")}
           onFechar={() => setEditando(null)} />
       )}

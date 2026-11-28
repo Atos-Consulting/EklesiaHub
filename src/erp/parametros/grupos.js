@@ -11,6 +11,7 @@ import NumeroNotas from "./NumeroNotas";
 import DadosIgreja from "./DadosIgreja";
 import Layout from "./Layout";
 import Modulos from "./Modulos";
+import PontosVenda from "./PontosVenda";
 
 // Parâmetros da empresa (só o Administrador acessa), organizados por área.
 // Para um novo parâmetro: acrescente uma aba no grupo certo (e, se for do sistema, o catálogo em catalogoParametros.js).
@@ -20,6 +21,9 @@ export const GRUPOS_PARAMETROS = [
     { id: "formas", rotulo: "Formas de pagamento", Tela: FormasPagamento },
     { id: "condicoes", rotulo: "Condições de pagamento", Tela: CondicoesPagamento },
     { id: "campanhas", rotulo: "Campanhas", Tela: Campanhas },
+  ] },
+  { id: "comercial", rotulo: "Comercial", abas: [
+    { id: "locais", rotulo: "Locais de venda", Tela: PontosVenda },
   ] },
   { id: "contabil", rotulo: "Contábil", abas: [
     { id: "contas", rotulo: "Plano de contas", Tela: PlanoContas },

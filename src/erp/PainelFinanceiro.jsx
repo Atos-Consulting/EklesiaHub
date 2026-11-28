@@ -18,7 +18,7 @@ const DIAS_ALERTA_CONCILIACAO = 7;
 const TRANSFERENCIAS = new Set(["transferencia_saida", "transferencia_entrada"]);
 const LINHAS_ENTRADA = [
   { id: "dizimo", rotulo: "Dízimos" }, { id: "oferta", rotulo: "Ofertas" }, { id: "campanha", rotulo: "Campanhas" },
-  { id: "recebimento", rotulo: "Recebimentos" }, { id: "avulsa", rotulo: "Entradas avulsas" },
+  { id: "recebimento", rotulo: "Recebimentos" }, { id: "venda", rotulo: "Vendas (frente de loja)" }, { id: "avulsa", rotulo: "Entradas avulsas" },
 ];
 const LINHAS_SAIDA = [{ id: "pagamento", rotulo: "Pagamentos" }, { id: "saida", rotulo: "Saídas avulsas" }];
 
@@ -30,6 +30,8 @@ function categoria(l) {
   if (TRANSFERENCIAS.has(l.origem)) return null;
   if (l.origem === "entrada") return l.subtipo === "dizimo" || l.subtipo === "campanha" ? l.subtipo : "oferta"; // "outra" (antiga) conta como oferta
   if (l.origem === "entrada_avulsa") return "avulsa";
+  if (l.origem === "venda_pdv") return "venda"; // v27
+  if (l.origem === "diferenca_caixa") return Number(l.valor) > 0 ? "avulsa" : "saida"; // sobra ou falta de caixa do frente de loja
   return l.origem; // recebimento, pagamento, saida
 }
 

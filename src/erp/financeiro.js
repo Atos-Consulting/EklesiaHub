@@ -34,7 +34,7 @@ export const TIPOS_MOVIMENTO = { transferencia: "Transferência", saida: "Saída
 export const ORIGENS_EXTRATO = {
   entrada: "Dízimo / oferta", pagamento: "Pagamento", transferencia_saida: "Transferência enviada",
   transferencia_entrada: "Transferência recebida", saida: "Saída avulsa", entrada_avulsa: "Entrada avulsa",
-  recebimento: "Recebimento",
+  recebimento: "Recebimento", venda_pdv: "Vendas (frente de loja)", diferenca_caixa: "Diferença de caixa (frente de loja)",
 };
 
 // Contas a receber (v14): mesma conta de criar_contas_receber no banco — mudou uma, mude a outra.
