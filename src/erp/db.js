@@ -213,6 +213,25 @@ export async function atualizarEmpresa(id, { razaoSocial, nomeFantasia, cnpj, at
   if (error) throw error;
 }
 
+// Forma preferida, PIX e conta bancária da pessoa (v29). Lançamento novo dela sem forma recebe a preferida,
+// e PIX/transferência sem dados recebem estes (gatilho titulos_dados_da_pessoa).
+function linhaPagamentoPessoa(d) {
+  const txt = (k) => String(d[k] ?? "").trim() || null;
+  return {
+    ...("forma_pagamento_id" in d ? { forma_pagamento_id: d.forma_pagamento_id ? Number(d.forma_pagamento_id) : null } : {}),
+    pix_tipo: txt("pix_tipo"), pix_chave: txt("pix_chave"), banco: txt("banco"), agencia: txt("agencia"), conta: txt("conta"),
+    tipo_conta: txt("tipo_conta"), titular: txt("titular"),
+    titular_documento: String(d.titular_documento ?? "").replace(/[^0-9A-Za-z]/g, "").toUpperCase() || null,
+  };
+}
+
+// Guarda no cadastro da pessoa os dados de PIX/conta digitados num lançamento (botão "Guardar no cadastro").
+export async function guardarDadosNaPessoa(pessoaId, dados) {
+  const { data, error } = await supabase.from("pessoas").update(linhaPagamentoPessoa(dados)).eq("id", pessoaId).select().single();
+  if (error) throw error;
+  return data;
+}
+
 export async function salvarPessoa(id, dados) {
   const linha = {
     tipo_pessoa: dados.tipoPessoa,
@@ -223,6 +242,8 @@ export async function salvarPessoa(id, dados) {
     observacoes: dados.observacoes.trim() || null,
     papeis: dados.papeis,
     ativo: dados.ativo,
+    // Dados de pagamento (v29): só vão quando a tela os edita (o cadastro de fornecedores).
+    ...(dados.pagamento ? linhaPagamentoPessoa(dados.pagamento) : {}),
   };
   const consulta = id
     ? supabase.from("pessoas").update(linha).eq("id", id)
@@ -401,6 +422,13 @@ export async function listarTitulosReceber() {
 
 // dados: { pessoa_id, descricao, emissao, valor, valor_por, parcelas, primeiro_vencimento, periodicidade, intervalo_dias,
 //          forma_pagamento, conta_caixa_id, centro_custo_id, observacao }
+// Conta a pagar sem nota (v29), mesmos dados de criar_contas_receber.
+export async function criarContasPagar(dados) {
+  const { data, error } = await supabase.rpc("criar_contas_pagar", { p_dados: dados });
+  if (error) throw error;
+  return data;
+}
+
 export async function criarContasReceber(dados) {
   const { data, error } = await supabase.rpc("criar_contas_receber", { p_dados: dados });
   if (error) throw error;
@@ -986,4 +1014,85 @@ export async function listarVendas(caixaIds) {
     .in("caixa_id", caixaIds).order("id", { ascending: false });
   if (error) throw error;
   return data;
+}
+
+// ── Vínculos (v29, sem migration): nota ↔ lançamentos do Financeiro ↔ contabilidade ──
+// origem = { tipo: "nota" | "titulo" | "contabil", id, origem?, origem_id? } (contabil = lançamento do diário).
+// Devolve { nota, itens, titulos, pagamentos, lancamentos } a partir da nota (se houver) ou do lançamento financeiro.
+export async function carregarVinculos(origem) {
+  let notaId = null;
+  let tituloId = null;
+  if (origem.tipo === "nota") notaId = origem.id;
+  else if (origem.tipo === "titulo") tituloId = origem.id;
+  else if (origem.origem === "nota") notaId = origem.origem_id;
+  else if (origem.origem === "titulo_pagar" || origem.origem === "titulo_receber") tituloId = origem.origem_id;
+  else if (origem.origem === "pagamento") {
+    const { data, error } = await supabase.from("pagamentos").select("titulo_id").eq("id", origem.origem_id).maybeSingle();
+    if (error) throw error;
+    tituloId = data?.titulo_id ?? null;
+  }
+
+  let titulo = null;
+  if (tituloId) {
+    const { data, error } = await supabase.from("titulos_financeiros")
+      .select("id, natureza, documento_id, pessoa_id, descricao, emissao, total_parcelas, conta_fixa_id").eq("id", tituloId).maybeSingle();
+    if (error) throw error;
+    titulo = data;
+    if (titulo?.documento_id) notaId = titulo.documento_id;
+  }
+
+  let nota = null;
+  let itens = [];
+  let titulos = [];
+  if (notaId) {
+    const [d, i, t] = await Promise.all([
+      supabase.from("documentos_entrada").select("id, tipo, numero, serie, data_emissao, data_entrada, valor_total, status, motivo_cancelamento, fornecedor:pessoas!documentos_entrada_fornecedor_fk(nome)").eq("id", notaId).maybeSingle(),
+      supabase.from("documento_entrada_itens").select("id, descricao, quantidade, valor_total").eq("documento_id", notaId).order("id"),
+      supabase.from("titulos_pagar").select("*").eq("documento_id", notaId).order("parcela").order("id"),
+    ]);
+    const erro = [d, i, t].find((r) => r.error)?.error;
+    if (erro) throw erro;
+    nota = d.data;
+    itens = i.data;
+    titulos = t.data.map((x) => ({ ...x, natureza: "pagar" }));
+  } else if (titulo) {
+    // Lançamento sem nota: traz as outras parcelas do mesmo lançamento (mesma pessoa, descrição e emissão).
+    const visao = titulo.natureza === "pagar" ? "titulos_pagar" : "titulos_receber";
+    let c = supabase.from(visao).select("*");
+    c = titulo.total_parcelas > 1 && !titulo.conta_fixa_id
+      ? c.eq("pessoa_id", titulo.pessoa_id).eq("descricao", titulo.descricao).eq("emissao", titulo.emissao).eq("total_parcelas", titulo.total_parcelas).is("documento_id", null)
+      : c.eq("id", titulo.id);
+    const { data, error } = await c.order("parcela").order("id");
+    if (error) throw error;
+    titulos = data.map((x) => ({ ...x, natureza: titulo.natureza }));
+  }
+
+  const ids = titulos.map((x) => x.id);
+  let pagamentos = [];
+  if (ids.length) {
+    const { data, error } = await supabase.from("pagamentos_lista").select("*").in("titulo_id", ids).order("data_pagamento").order("id");
+    if (error) throw error;
+    pagamentos = data;
+  }
+
+  const filtros = [];
+  if (notaId) filtros.push(`and(origem.eq.nota,origem_id.eq.${Number(notaId)})`);
+  if (ids.length) filtros.push(`and(origem.in.(titulo_pagar,titulo_receber),origem_id.in.(${ids.map(Number).join(",")}))`);
+  if (pagamentos.length) filtros.push(`and(origem.eq.pagamento,origem_id.in.(${pagamentos.map((x) => Number(x.id)).join(",")}))`);
+  if (origem.tipo === "contabil" && !filtros.length) filtros.push(`lancamento_id.eq.${Number(origem.id)}`);
+  let partidas = [];
+  if (filtros.length) {
+    const { data, error } = await supabase.from("razao_contabil").select("*").or(filtros.join(","))
+      .order("data").order("lancamento_id").order("partida_id").limit(2000);
+    if (error) throw error;
+    partidas = data;
+  }
+  const porLanc = new Map();
+  for (const p of partidas) {
+    if (!porLanc.has(p.lancamento_id)) porLanc.set(p.lancamento_id, { ...p, id: p.lancamento_id, partidas: [], valor: 0 });
+    const l = porLanc.get(p.lancamento_id);
+    l.partidas.push(p);
+    l.valor += Math.round(Number(p.debito) * 100);
+  }
+  return { nota, itens, titulos, pagamentos, lancamentos: [...porLanc.values()] };
 }

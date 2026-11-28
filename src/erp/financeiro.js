@@ -111,7 +111,12 @@ export function situacaoTitulo(t, hoje, natureza = "pagar") {
 // transferência (banco, agência, conta, tipo de conta, titular e CPF/CNPJ) e cheque (número).
 export const TIPOS_CHAVE_PIX = { cpf: "CPF", cnpj: "CNPJ", email: "E-mail", telefone: "Telefone", aleatoria: "Chave aleatória" };
 export const TIPOS_CONTA = { corrente: "Conta corrente", poupanca: "Poupança", pagamento: "Conta de pagamento" };
-const CAMPOS_PAGAMENTO = ["linha_digitavel", "pix_chave", "pix_tipo", "banco", "agencia", "conta", "tipo_conta", "titular", "titular_documento", "cheque_numero"];
+export const BANDEIRAS_CARTAO = { visa: "Visa", mastercard: "Mastercard", elo: "Elo", amex: "American Express", hipercard: "Hipercard", outra: "Outra" };
+// Cartão (v29): bandeira, 4 últimos dígitos, parcelas no cartão (crédito) e autorização/NSU. O número inteiro nunca é guardado.
+const CAMPOS_CARTAO = ["cartao_bandeira", "cartao_final", "cartao_parcelas", "cartao_autorizacao"];
+const CAMPOS_PAGAMENTO = ["linha_digitavel", "pix_chave", "pix_tipo", "banco", "agencia", "conta", "tipo_conta", "titular", "titular_documento", "cheque_numero", ...CAMPOS_CARTAO];
+// Dados de PIX/conta que também ficam no cadastro da pessoa (v29).
+export const CAMPOS_CONTA_PESSOA = ["pix_tipo", "pix_chave", "banco", "agencia", "conta", "tipo_conta", "titular", "titular_documento"];
 
 // Linha digitável no formato do boleto bancário (47 números); outros tamanhos ficam como vieram.
 export function formatarLinha(l) {
@@ -128,6 +133,7 @@ export function dadosPagamentoDe(t) {
   const d = { forma_pagamento_id: String(t.forma_pagamento_id ?? "") };
   for (const c of CAMPOS_PAGAMENTO) d[c] = t[c] ?? "";
   d.linha_digitavel = formatarLinha(t.linha_digitavel);
+  d.cartao_parcelas = t.cartao_parcelas ? String(t.cartao_parcelas) : "";
   return d;
 }
 // Para atualizar_titulo: vencimento e observação vêm do lançamento (ou da tela que edita).
@@ -136,11 +142,21 @@ export function dadosPagamentoParaSalvar(d, { vencimento, observacao }) {
   for (const c of CAMPOS_PAGAMENTO) r[c] = String(d[c] ?? "").trim();
   r.linha_digitavel = r.linha_digitavel.replace(/\D/g, "");
   r.titular_documento = r.titular_documento.replace(/[^0-9A-Za-z]/g, "").toUpperCase();
+  r.cartao_final = r.cartao_final.replace(/\D/g, "");
   return r;
 }
 export const mesmosDadosPagamento = (a, b) => ["forma_pagamento_id", ...CAMPOS_PAGAMENTO].every((c) => String(a[c] ?? "") === String(b[c] ?? ""));
-// Último lançamento da mesma pessoa com dados de PIX ou banco: para reaproveitar ("usar os dados de ...").
-export function ultimosDadosDaPessoa(titulos, t) {
+// Dados de PIX/conta para reaproveitar ("usar os dados de ..."): primeiro os do cadastro da pessoa (v29),
+// senão os do último lançamento da mesma pessoa. pessoa = registro de pessoas (opcional).
+export function ultimosDadosDaPessoa(titulos, t, pessoa) {
+  if (pessoa && (pessoa.pix_chave || pessoa.banco || pessoa.conta)) return { ...pessoa, doCadastro: true };
   return (titulos || []).filter((x) => x.id !== t.id && x.pessoa_id === t.pessoa_id && (x.pix_chave || x.banco || x.conta))
     .sort((a, b) => String(b.data_pagamento ?? b.vencimento).localeCompare(String(a.data_pagamento ?? a.vencimento)))[0] ?? null;
+}
+
+// Os dados de PIX/conta da tela são diferentes dos do cadastro da pessoa? (para oferecer "guardar no cadastro")
+export function difereDaPessoa(dados, pessoa) {
+  if (!pessoa || !(dados.pix_chave || dados.banco || dados.conta)) return false;
+  const limpo = (k, v) => (k === "titular_documento" ? String(v ?? "").replace(/[^0-9A-Za-z]/g, "").toUpperCase() : String(v ?? "").trim());
+  return CAMPOS_CONTA_PESSOA.some((k) => limpo(k, dados[k]) !== limpo(k, pessoa[k]));
 }

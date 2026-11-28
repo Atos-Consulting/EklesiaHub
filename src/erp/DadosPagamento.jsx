@@ -2,11 +2,12 @@ import { useState } from "react";
 import { lbl, inp } from "../estilos";
 import FormaSelect from "./FormaSelect";
 import { mascararDocumentoLivre, limparDocumentoLivre, mascararDocumento } from "./format";
-import { formaPorId, nomeForma, formatarLinha, erroLinhaDigitavel, TIPOS_CHAVE_PIX, TIPOS_CONTA } from "./financeiro";
+import { formaPorId, nomeForma, formatarLinha, erroLinhaDigitavel, TIPOS_CHAVE_PIX, TIPOS_CONTA, BANDEIRAS_CARTAO } from "./financeiro";
 
 // Dados de pagamento de um lançamento conforme a forma escolhida (v21): o comportamento da forma decide
 // o que aparece — boleto: linha digitável; PIX: tipo e chave; transferência: banco, agência, conta, tipo,
-// titular e CPF/CNPJ; cheque: número. Campo já preenchido continua aparecendo mesmo trocando a forma.
+// titular e CPF/CNPJ; cheque: número; cartão (v29): bandeira, 4 últimos dígitos, parcelas e autorização.
+// Campo já preenchido continua aparecendo mesmo trocando a forma.
 // Usado no detalhe do lançamento e na hora de pagar/receber (ContasPagar.jsx).
 
 const grade = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: "0 12px" };
@@ -22,8 +23,9 @@ export function Copiar({ texto }) {
   );
 }
 
-// valor = dadosPagamentoDe(t); onChange(novoValor). sugestao = outro lançamento da mesma pessoa com PIX/banco.
-export function CamposPagamento({ formas, valor: f, onChange, prefixo = "dp", sugestao, rotuloForma = "Forma de pagamento" }) {
+// valor = dadosPagamentoDe(t); onChange(novoValor). sugestao = dados do cadastro da pessoa ou de outro lançamento
+// dela (ultimosDadosDaPessoa). guardar = { nome, onGuardar } mostra "Guardar no cadastro de <nome>" (v29).
+export function CamposPagamento({ formas, valor: f, onChange, prefixo = "dp", sugestao, guardar, rotuloForma = "Forma de pagamento" }) {
   const set = (k) => (e) => onChange({ ...f, [k]: e.target.value });
   const tipo = formaPorId(formas, f.forma_pagamento_id)?.tipo;
   const mostra = (forma, ...campos) => tipo === forma || campos.some((c) => f[c]);
@@ -43,7 +45,7 @@ export function CamposPagamento({ formas, valor: f, onChange, prefixo = "dp", su
         onChange={(v) => onChange({ ...f, forma_pagamento_id: v })} />
       {sugestao && precisaDeConta && vazio && (
         <div className="dica-dados">
-          Há dados de {sugestao.pix_chave ? `PIX (${sugestao.pix_chave})` : `conta (${[sugestao.banco, sugestao.agencia, sugestao.conta].filter(Boolean).join(" · ")})`} em outro lançamento desta pessoa.
+          Há dados de {sugestao.pix_chave ? `PIX (${sugestao.pix_chave})` : `conta (${[sugestao.banco, sugestao.agencia, sugestao.conta].filter(Boolean).join(" · ")})`} {sugestao.doCadastro ? "no cadastro desta pessoa" : "em outro lançamento desta pessoa"}.
           <button type="button" className="btn btn-ghost btn-sm" onClick={usarSugestao}>Usar estes dados</button>
         </div>
       )}
@@ -105,6 +107,45 @@ export function CamposPagamento({ formas, valor: f, onChange, prefixo = "dp", su
         </>
       )}
 
+      {guardar && (
+        <div className="dica-dados">
+          Estes dados de {f.pix_chave ? "PIX" : "conta"} não estão no cadastro de {guardar.nome}. Guardando, os próximos lançamentos já vêm com eles.
+          <button type="button" className="btn btn-ghost btn-sm" onClick={guardar.onGuardar} disabled={guardar.salvando}>{guardar.salvando ? "Guardando..." : "Guardar no cadastro"}</button>
+          {guardar.erro && <span style={{ color: "var(--danger)", width: "100%" }}>{guardar.erro}</span>}
+        </div>
+      )}
+
+      {(tipo === "cartao_credito" || tipo === "cartao_debito" || f.cartao_bandeira || f.cartao_final || f.cartao_parcelas || f.cartao_autorizacao) && (
+        <>
+          <div style={grade}>
+            <div>
+              <label style={lbl} htmlFor={id("bandeira")}>Bandeira</label>
+              <select id={id("bandeira")} style={inp} value={f.cartao_bandeira} onChange={set("cartao_bandeira")}>
+                <option value="">—</option>
+                {Object.entries(BANDEIRAS_CARTAO).map(([k, r]) => <option key={k} value={k}>{r}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={lbl} htmlFor={id("final")}>Final do cartão</label>
+              <input id={id("final")} style={inp} inputMode="numeric" maxLength={4} placeholder="4 últimos dígitos" value={f.cartao_final}
+                onChange={(e) => onChange({ ...f, cartao_final: e.target.value.replace(/\D/g, "").slice(0, 4) })} />
+            </div>
+            {(tipo === "cartao_credito" || f.cartao_parcelas) && (
+              <div>
+                <label style={lbl} htmlFor={id("cparc")}>Parcelas no cartão</label>
+                <input id={id("cparc")} style={{ ...inp, textAlign: "right" }} inputMode="numeric" maxLength={2} placeholder="1" value={f.cartao_parcelas}
+                  onChange={(e) => onChange({ ...f, cartao_parcelas: e.target.value.replace(/\D/g, "").slice(0, 2) })} />
+              </div>
+            )}
+            <div>
+              <label style={lbl} htmlFor={id("aut")}>Autorização / NSU</label>
+              <input id={id("aut")} style={inp} maxLength={40} value={f.cartao_autorizacao} onChange={set("cartao_autorizacao")} placeholder="Do comprovante da maquininha" />
+            </div>
+          </div>
+          <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>Por segurança, só os 4 últimos dígitos do cartão são guardados.</div>
+        </>
+      )}
+
       {mostra("cheque", "cheque_numero") && (
         <div style={{ maxWidth: 220 }}>
           <label style={lbl} htmlFor={id("cheque")}>Número do cheque</label>
@@ -130,6 +171,13 @@ export function LeituraPagamento({ t, formas }) {
       {(t.banco || t.agencia || t.conta) && <div style={grade}>{leitura("Banco", t.banco)}{leitura("Agência", t.agencia)}{leitura("Conta", t.conta)}{t.tipo_conta && leitura("Tipo de conta", TIPOS_CONTA[t.tipo_conta])}</div>}
       {(t.titular || doc) && <div style={grade}>{leitura("Titular", t.titular)}{leitura("CPF/CNPJ do titular", doc)}</div>}
       {t.cheque_numero && leitura("Número do cheque", t.cheque_numero)}
+      {(t.cartao_bandeira || t.cartao_final || t.cartao_autorizacao) && (
+        <div style={grade}>
+          {leitura("Cartão", [BANDEIRAS_CARTAO[t.cartao_bandeira], t.cartao_final && `final ${t.cartao_final}`].filter(Boolean).join(" · "))}
+          {t.cartao_parcelas && leitura("Parcelas no cartão", `${t.cartao_parcelas}x`)}
+          {t.cartao_autorizacao && leitura("Autorização / NSU", t.cartao_autorizacao)}
+        </div>
+      )}
     </>
   );
 }

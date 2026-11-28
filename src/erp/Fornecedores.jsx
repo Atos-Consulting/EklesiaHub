@@ -84,6 +84,7 @@ export default function Fornecedores({ cadastros, podeEditar, onCadastrosMudaram
       {editando && (
         <PessoaModal
           inicial={editando === "novo" ? null : editando}
+          formas={cadastros.formas}
           onSalvo={aoSalvar}
           onFechar={() => setEditando(null)}
         />

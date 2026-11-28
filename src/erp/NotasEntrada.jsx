@@ -7,6 +7,8 @@ import Modal from "./Modal";
 import ThOrdenavel from "./ThOrdenavel";
 import { useOrdenacao } from "./useOrdenacao";
 import { listarNotas, aprovarNota, mensagemErro } from "./db";
+import Vinculos from "./Vinculos";
+import { usaContabilidade } from "./catalogoParametros";
 import { TIPOS_NOTA, STATUS_NOTA, TOM_STATUS, formatarMoeda, formatarData, hojeISO, somarValores } from "./format";
 
 const FILTROS_VAZIOS = { busca: "", status: "", de: "", ate: "" };
@@ -35,10 +37,12 @@ function Indicador({ icone, tom = "", rotulo, valor, sub }) {
   );
 }
 
-export default function NotasEntrada({ cadastros, podeEditar, podeAprovar, podeAdministrar, onCadastrosMudaram }) {
+// notaInicial: id vindo da rota (#/administrativo/notas/<id>, link de Vínculos) — abre a nota direto.
+export default function NotasEntrada({ cadastros, podeEditar, podeAprovar, podeAdministrar, onCadastrosMudaram, notaInicial }) {
   const [notas, setNotas] = useState(null);
   const [erro, setErro] = useState("");
-  const [aberta, setAberta] = useState(null); // null | "nova" | id
+  const [aberta, setAberta] = useState(() => (/^\d+$/.test(notaInicial ?? "") ? Number(notaInicial) : null)); // null | "nova" | id
+  const [vinculos, setVinculos] = useState(null); // id da nota
   const [filtros, setFiltros] = useState(FILTROS_VAZIOS);
   const [marcadas, setMarcadas] = useState(() => new Set());
   const [lote, setLote] = useState(null); // null | { fase: "confirmar" | "andamento" | "fim", falhas, feitas, total }
@@ -173,12 +177,13 @@ export default function NotasEntrada({ cadastros, podeEditar, podeAprovar, podeA
                 <ThOrdenavel chave="emissao" ordenacao={ordenacao}>Emissão</ThOrdenavel>
                 <ThOrdenavel chave="valor" ordenacao={ordenacao} className="num">Valor</ThOrdenavel>
                 <ThOrdenavel chave="status" ordenacao={ordenacao}>Status</ThOrdenavel>
+                <th className="acoes"><span className="sr-only">Vínculos</span></th>
               </tr>
             </thead>
             <tbody>
-              {notas === null && !erro && <tr><td className="vazio" colSpan={podeAprovar ? 8 : 7}>Carregando notas...</td></tr>}
+              {notas === null && !erro && <tr><td className="vazio" colSpan={podeAprovar ? 9 : 8}>Carregando notas...</td></tr>}
               {notas && filtradas.length === 0 && (
-                <tr><td className="vazio" colSpan={podeAprovar ? 8 : 7}>{temFiltro ? "Nenhuma nota encontrada com esses filtros." : "Nenhuma nota lançada ainda."}</td></tr>
+                <tr><td className="vazio" colSpan={podeAprovar ? 9 : 8}>{temFiltro ? "Nenhuma nota encontrada com esses filtros." : "Nenhuma nota lançada ainda."}</td></tr>
               )}
               {linhas.map((n) => (
                 <tr key={n.id} className="clicavel" onClick={() => setAberta(n.id)} tabIndex={0}
@@ -206,6 +211,14 @@ export default function NotasEntrada({ cadastros, podeEditar, podeAprovar, podeA
                     {formatarMoeda(n.valor_total)}
                   </td>
                   <td><Pill tone={TOM_STATUS[n.status]}>{STATUS_NOTA[n.status]}</Pill></td>
+                  <td className="acoes" onClick={(e) => e.stopPropagation()}>
+                    {n.status !== "rascunho" && (
+                      <button type="button" className="icon-btn btn-icone" title="Ver financeiro (parcelas, pago e a pagar) e contabilidade"
+                        aria-label={`Financeiro e contabilidade da nota ${n.numero}`} onClick={() => setVinculos(n.id)}>
+                        <Icone nome="vinculo" tamanho={15} />
+                      </button>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -250,6 +263,8 @@ export default function NotasEntrada({ cadastros, podeEditar, podeAprovar, podeA
           )}
         </Modal>
       )}
+
+      {vinculos && <Vinculos origem={{ tipo: "nota", id: vinculos }} caixas={cadastros.caixas} comContabilidade={usaContabilidade(cadastros.parametros)} onFechar={() => setVinculos(null)} />}
 
       {aberta && (
         <NotaModal

@@ -275,7 +275,7 @@ export default function ErpApp({ perfil: perfilInicial, onSair, onEmpresaTrocada
     const props = { cadastros, podeEditar: perm.lancar, podeAprovar: perm.aprovar, podeAdministrar: perm.administrar, onCadastrosMudaram: recarregarCadastros };
     if (tela?.id === "fornecedores") return <Fornecedores {...props} />;
     if (tela?.id === "importar") return <ImportarXml perfil={perfil} {...props} />;
-    return <NotasEntrada {...props} />;
+    return <NotasEntrada key={rota.aba} {...props} notaInicial={rota.aba} />;
   }
 
   function item(m) {

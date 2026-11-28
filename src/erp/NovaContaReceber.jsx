@@ -3,19 +3,28 @@ import { lbl, inp, msgErro } from "../estilos";
 import Icone from "./Icone";
 import Modal from "./Modal";
 import PessoaModal from "./PessoaModal";
-import { criarContasReceber, cancelarTituloReceber, mensagemErro } from "./db";
+import { criarContasReceber, criarContasPagar, cancelarTituloReceber, mensagemErro } from "./db";
 import { formatarMoeda, formatarData, hojeISO, lerNumero, paraCentavos, somarValores, mascararDocumento } from "./format";
 import { parcelasReceber } from "./financeiro";
 import FormaSelect from "./FormaSelect";
 
 const inteiro = (v) => (/^\d+$/.test(String(v).trim()) ? Number(v) : NaN);
 
-// Lança uma conta a receber em uma ou mais parcelas. A prévia repete a conta do banco (criar_contas_receber).
-export function NovaContaReceber({ cadastros, onFechar, onConcluido, onCadastrosMudaram }) {
+// Lança uma conta a receber — ou, desde a v29, a pagar sem nota — em uma ou mais parcelas.
+// A prévia repete a conta do banco (criar_contas_receber / criar_contas_pagar, mesma divisão).
+const TXT = {
+  receber: { titulo: "Nova conta a receber", pessoa: "Pagador (de quem a igreja vai receber) *", erroPessoa: "Escolha de quem a igreja vai receber", papel: "cliente",
+    desc: "Ex.: aluguel do salão social, inscrições do retiro", caixa: "Conta caixa prevista", obs: "Ex.: contrato assinado, cobrar por WhatsApp" },
+  pagar: { titulo: "Nova conta a pagar", pessoa: "Fornecedor (a quem a igreja vai pagar) *", erroPessoa: "Escolha a quem a igreja vai pagar", papel: "fornecedor",
+    desc: "Ex.: conserto do telhado, oferta missionária, reembolso ao pastor", caixa: "Conta caixa prevista (de onde sai)", obs: "Ex.: combinado por telefone, sem nota fiscal" },
+};
+export function NovaContaReceber({ natureza = "receber", cadastros, onFechar, onConcluido, onCadastrosMudaram }) {
+  const X = TXT[natureza];
   const caixasAtivas = cadastros.caixas.filter((c) => c.ativo);
   const [f, setF] = useState({
     pessoaId: "", descricao: "", valor: "", valorPor: "total", parcelas: "1", primeiroVencimento: hojeISO(), periodicidade: "mensal",
-    intervaloDias: "30", forma: String((cadastros.formas || []).find((x) => x.ativo && x.tipo === "pix")?.id ?? ""), contaCaixaId: caixasAtivas.length === 1 ? String(caixasAtivas[0].id) : "", centroCustoId: "", observacao: "",
+    intervaloDias: "30", forma: natureza === "receber" ? String((cadastros.formas || []).find((x) => x.ativo && x.tipo === "pix")?.id ?? "") : "",
+    contaCaixaId: caixasAtivas.length === 1 ? String(caixasAtivas[0].id) : "", centroCustoId: "", observacao: "",
   });
   const [tentou, setTentou] = useState(false);
   const [salvando, setSalvando] = useState(false);
@@ -26,6 +35,12 @@ export function NovaContaReceber({ cadastros, onFechar, onConcluido, onCadastros
 
   const pessoas = useMemo(() => [...cadastros.pessoas, ...pessoasExtras.filter((x) => !cadastros.pessoas.some((p) => p.id === x.id))]
     .filter((p) => p.ativo).sort((a, b) => a.nome.localeCompare(b.nome)), [cadastros.pessoas, pessoasExtras]);
+  // Escolher a pessoa traz a forma preferida do cadastro dela (v29).
+  const escolherPessoa = (id, lista = pessoas) => {
+    const p = lista.find((x) => String(x.id) === String(id));
+    const preferida = p?.forma_pagamento_id && (cadastros.formas || []).some((x) => x.ativo && x.id === p.forma_pagamento_id) ? String(p.forma_pagamento_id) : null;
+    setF((x) => ({ ...x, pessoaId: String(id), ...(preferida ? { forma: preferida } : {}) }));
+  };
 
   const valor = lerNumero(f.valor);
   const parcelas = inteiro(f.parcelas);
@@ -35,7 +50,7 @@ export function NovaContaReceber({ cadastros, onFechar, onConcluido, onCadastros
     periodicidade: f.periodicidade, intervaloDias: intervalo,
   });
   const erros = {};
-  if (!f.pessoaId) erros.pessoaId = "Escolha de quem a igreja vai receber";
+  if (!f.pessoaId) erros.pessoaId = X.erroPessoa;
   if (!f.descricao.trim()) erros.descricao = "Descreva a conta";
   if (!(valor > 0)) erros.valor = "Informe um valor maior que zero";
   if (!(parcelas >= 1 && parcelas <= 120)) erros.parcelas = "De 1 a 120";
@@ -52,7 +67,7 @@ export function NovaContaReceber({ cadastros, onFechar, onConcluido, onCadastros
     if (Object.keys(erros).length) return;
     setSalvando(true);
     try {
-      await criarContasReceber({
+      await (natureza === "pagar" ? criarContasPagar : criarContasReceber)({
         pessoa_id: Number(f.pessoaId), descricao: f.descricao.trim(), emissao: hojeISO(), valor, valor_por: f.valorPor, parcelas,
         primeiro_vencimento: f.primeiroVencimento, periodicidade: f.periodicidade, intervalo_dias: f.periodicidade === "dias" ? intervalo : null,
         forma_pagamento_id: f.forma ? Number(f.forma) : null, conta_caixa_id: f.contaCaixaId ? Number(f.contaCaixaId) : null,
@@ -64,15 +79,15 @@ export function NovaContaReceber({ cadastros, onFechar, onConcluido, onCadastros
 
   const grade = (min) => ({ display: "grid", gridTemplateColumns: `repeat(auto-fit, minmax(${min}px, 1fr))`, gap: "0 12px" });
   return (
-    <Modal titulo="Nova conta a receber" largura={680} fecharFora={false} onFechar={onFechar}
+    <Modal titulo={X.titulo} largura={680} fecharFora={false} onFechar={onFechar}
       rodape={<>
         <button className="btn btn-ghost" onClick={onFechar} disabled={salvando}>Cancelar</button>
         <button className="btn btn-primary" onClick={salvar} disabled={salvando}>{salvando ? "Salvando..." : lista.length > 1 ? `Lançar ${lista.length} parcelas` : "Lançar"}</button>
       </>}>
       <form onSubmit={(e) => { e.preventDefault(); salvar(); }} noValidate>
-        <label style={{ ...lbl, marginTop: 4 }} htmlFor="cr-pessoa">Pagador (de quem a igreja vai receber) *</label>
+        <label style={{ ...lbl, marginTop: 4 }} htmlFor="cr-pessoa">{X.pessoa}</label>
         <div style={{ display: "flex", gap: 8 }}>
-          <select id="cr-pessoa" autoFocus style={{ ...inp, flex: 1, minWidth: 0, ...borda("pessoaId") }} value={f.pessoaId} onChange={set("pessoaId")}>
+          <select id="cr-pessoa" autoFocus style={{ ...inp, flex: 1, minWidth: 0, ...borda("pessoaId") }} value={f.pessoaId} onChange={(e) => escolherPessoa(e.target.value)}>
             <option value="">— Selecione —</option>
             {pessoas.map((p) => <option key={p.id} value={p.id}>{p.nome}{p.documento ? ` · ${mascararDocumento(p.tipo_pessoa, p.documento)}` : ""}</option>)}
           </select>
@@ -81,7 +96,7 @@ export function NovaContaReceber({ cadastros, onFechar, onConcluido, onCadastros
         {msg("pessoaId")}
 
         <label style={lbl} htmlFor="cr-desc">Descrição *</label>
-        <input id="cr-desc" maxLength={200} style={{ ...inp, ...borda("descricao") }} value={f.descricao} onChange={set("descricao")} placeholder="Ex.: aluguel do salão social, inscrições do retiro" />
+        <input id="cr-desc" maxLength={200} style={{ ...inp, ...borda("descricao") }} value={f.descricao} onChange={set("descricao")} placeholder={X.desc} />
         {msg("descricao")}
 
         <div style={grade(150)}>
@@ -132,9 +147,9 @@ export function NovaContaReceber({ cadastros, onFechar, onConcluido, onCadastros
             <FormaSelect id="cr-forma" style={inp} formas={cadastros.formas} value={f.forma} onChange={(v) => setF((p) => ({ ...p, forma: v }))} vazio="— Não informada —" />
           </div>
           <div>
-            <label style={lbl} htmlFor="cr-caixa">Conta caixa prevista</label>
+            <label style={lbl} htmlFor="cr-caixa">{X.caixa}</label>
             <select id="cr-caixa" style={inp} value={f.contaCaixaId} onChange={set("contaCaixaId")}>
-              <option value="">— Escolher ao receber —</option>
+              <option value="">— Escolher na baixa —</option>
               {caixasAtivas.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
             </select>
           </div>
@@ -148,7 +163,7 @@ export function NovaContaReceber({ cadastros, onFechar, onConcluido, onCadastros
         </div>
 
         <label style={lbl} htmlFor="cr-obs">Observação</label>
-        <input id="cr-obs" maxLength={500} style={inp} value={f.observacao} onChange={set("observacao")} placeholder="Ex.: contrato assinado, cobrar por WhatsApp" />
+        <input id="cr-obs" maxLength={500} style={inp} value={f.observacao} onChange={set("observacao")} placeholder={X.obs} />
 
         {lista.length > 0 && (
           <div className="painel" style={{ paddingTop: 10, marginTop: 14 }}>
@@ -166,8 +181,8 @@ export function NovaContaReceber({ cadastros, onFechar, onConcluido, onCadastros
       </form>
       {erro && <div className="alert alert-danger" role="alert" style={{ marginTop: 16 }}><Icone nome="alerta" tamanho={16} /><span>{erro}</span></div>}
       {novaPessoa && (
-        <PessoaModal papelPadrao="cliente" onFechar={() => setNovaPessoa(false)}
-          onSalvo={(p) => { setNovaPessoa(false); setPessoasExtras((l) => [...l, p]); setF((x) => ({ ...x, pessoaId: String(p.id) })); onCadastrosMudaram(); }} />
+        <PessoaModal papelPadrao={X.papel} formas={cadastros.formas} onFechar={() => setNovaPessoa(false)}
+          onSalvo={(p) => { setNovaPessoa(false); setPessoasExtras((l) => [...l, p]); escolherPessoa(p.id, [p]); onCadastrosMudaram(); }} />
       )}
     </Modal>
   );

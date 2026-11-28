@@ -11,6 +11,9 @@ import { formatarMoeda, formatarData, hojeISO, lerNumero, paraCentavos, deCentav
 import { ORIGEM_PAGAMENTO, nomeForma, situacaoTitulo, somarDias, temDadosPagamento, dadosPagamentoDe, dadosPagamentoParaSalvar, mesmosDadosPagamento, erroLinhaDigitavel, ultimosDadosDaPessoa } from "./financeiro";
 import { CamposPagamento, LeituraPagamento } from "./DadosPagamento";
 import Comprovantes, { EscolherComprovantes } from "./Comprovantes";
+import Vinculos from "./Vinculos";
+import { useGuardarPessoa } from "./useGuardarPessoa";
+import { usaContabilidade } from "./catalogoParametros";
 import { enviarComprovante } from "./db";
 
 // Mesma tela para contas a pagar (geradas pelas notas) e contas a receber (lançadas aqui): a aba escolhe a situação.
@@ -19,8 +22,8 @@ const TEXTOS = {
   pagar: {
     titulo: "Contas a pagar", pessoa: "Fornecedor", buscar: "Fornecedor ou documento", pagas: "Pagas", pagosMes: "Pagos no mês",
     acao: "Pagar", feito: "Pago", baixa: "Pagamento", baixas: "Pagamentos", dados: "Dados para pagamento",
-    subtitulo: "Lançamentos gerados pela aprovação das notas de entrada, conforme a condição de pagamento. Clique em um lançamento para ver ou completar os dados de pagamento (boleto, PIX, banco); ao pagar, o valor sai da conta caixa escolhida.",
-    vazio: "Nenhuma conta a pagar ainda. Elas aparecem quando uma nota de entrada é aprovada.",
+    subtitulo: "Lançamentos gerados pela aprovação das notas de entrada, pelas contas fixas ou lançados aqui (sem nota). Clique em um lançamento para ver ou completar os dados de pagamento (boleto, PIX, banco, cartão); ao pagar, o valor sai da conta caixa escolhida.",
+    vazio: "Nenhuma conta a pagar ainda. Elas aparecem quando uma nota de entrada é aprovada, ou use “Nova conta a pagar”.",
   },
   receber: {
     titulo: "Contas a receber", pessoa: "Pagador", buscar: "Pagador ou descrição", pagas: "Recebidas", pagosMes: "Recebidos no mês",
@@ -64,8 +67,16 @@ export default function ContasPagar({ natureza = "pagar", situacaoInicial, cadas
   const [titulos, setTitulos] = useState(null);
   const [erro, setErro] = useState("");
   const [filtros, setFiltros] = useState(FILTROS_VAZIOS);
-  const [situacao, setSituacao] = useState(SITUACOES.some((x) => x.id === situacaoInicial) ? situacaoInicial : "abertos"); // vem do Painel: #/financeiro/lancamentos/pagar/vencido
-  const [acao, setAcao] = useState(null); // { tipo: "pagar" | "estornar" | "ver" | "nova" | "cancelar", titulo }
+  // Vem do Painel (#/financeiro/lancamentos/pagar/vencido) ou de um link de Vínculos (…/pagar/t<id>: abre o lançamento).
+  const abrirId = /^t\d+$/.test(situacaoInicial ?? "") ? Number(situacaoInicial.slice(1)) : null;
+  const [situacao, setSituacao] = useState(SITUACOES.some((x) => x.id === situacaoInicial) ? situacaoInicial : abrirId ? "todos" : "abertos");
+  const [acao, setAcao] = useState(null); // { tipo: "pagar" | "estornar" | "ver" | "nova" | "cancelar" | "vinculos", titulo }
+  const [abriuLink, setAbriuLink] = useState(false);
+  if (abrirId && !abriuLink && titulos) {
+    setAbriuLink(true);
+    const alvo = titulos.find((x) => x.id === abrirId);
+    if (alvo) setAcao({ tipo: "ver", titulo: alvo });
+  }
   const hoje = hojeISO();
   const emSete = somarDias(hoje, 7);
 
@@ -123,7 +134,7 @@ export default function ContasPagar({ natureza = "pagar", situacaoInicial, cadas
     <div>
       <div className="page-header">
         <Header title={T.titulo} subtitle={T.subtitulo} />
-        {receber && podePagar && <button className="btn btn-primary" onClick={() => setAcao({ tipo: "nova" })}><Icone nome="mais" tamanho={16} traco={2.2} /> Nova conta a receber</button>}
+        {podePagar && <button className="btn btn-primary" onClick={() => setAcao({ tipo: "nova" })}><Icone nome="mais" tamanho={16} traco={2.2} /> {receber ? "Nova conta a receber" : "Nova conta a pagar"}</button>}
       </div>
 
       <div className="stat-grid">
@@ -188,6 +199,7 @@ export default function ContasPagar({ natureza = "pagar", situacaoInicial, cadas
                     <td>{t.data_pagamento ? <>{formatarData(t.data_pagamento)}{t.qtd_comprovantes > 0 && <span className="muted" title={`${t.qtd_comprovantes} comprovante(s)`} style={{ marginLeft: 4 }}><Icone nome="clipe" tamanho={13} /></span>}<div className="muted" style={{ fontSize: 12 }}>{formatarMoeda(t.valor_pago)}</div></> : "—"}</td>
                     {podePagar && (
                       <td className="acoes" style={{ whiteSpace: "nowrap" }} onClick={(e) => e.stopPropagation()}>
+                        <button type="button" className="icon-btn btn-icone" title="Ver nota, parcelas e contabilidade" aria-label={`Vínculos de ${t.descricao}`} onClick={() => setAcao({ tipo: "vinculos", titulo: t })}><Icone nome="vinculo" tamanho={15} /></button>
                         {t.status === "aberto" && (
                           <button type="button" className="btn btn-primary btn-sm" onClick={() => setAcao({ tipo: "pagar", titulo: t })}>{T.acao}</button>
                         )}
@@ -211,14 +223,16 @@ export default function ContasPagar({ natureza = "pagar", situacaoInicial, cadas
       </div>
 
       {acao?.tipo === "pagar" && <PagarModal natureza={natureza} titulo={acao.titulo} caixas={cadastros.caixas} pessoas={cadastros.pessoas} formas={cadastros.formas} titulos={titulos} onFechar={() => setAcao(null)} onConcluido={aoConcluir} />}
-      {acao?.tipo === "nova" && <NovaContaReceber cadastros={cadastros} onFechar={() => setAcao(null)} onConcluido={aoConcluir} onCadastrosMudaram={onCadastrosMudaram} />}
+      {acao?.tipo === "vinculos" && <Vinculos origem={{ tipo: "titulo", id: acao.titulo.id }} caixas={cadastros.caixas} comContabilidade={usaContabilidade(cadastros.parametros)} onFechar={() => setAcao(null)} />}
+      {acao?.tipo === "nova" && <NovaContaReceber natureza={natureza} cadastros={cadastros} onFechar={() => setAcao(null)} onConcluido={aoConcluir} onCadastrosMudaram={onCadastrosMudaram} />}
       {acao?.tipo === "cancelar" && <CancelarContaReceber titulo={acao.titulo} natureza={natureza} onFechar={() => setAcao(null)} onConcluido={aoConcluir} />}
       {acao?.tipo === "estornar" && (
         <EstornoModal natureza={natureza} descricao={`${acao.titulo.descricao} — parcela ${acao.titulo.parcela}/${acao.titulo.total_parcelas} · ${formatarMoeda(acao.titulo.valor_pago)}`}
           pagamentoId={acao.titulo.pagamento_id} onFechar={() => setAcao(null)} onConcluido={aoConcluir} />
       )}
       {acao?.tipo === "ver" && (
-        <LancamentoModal natureza={natureza} titulo={acao.titulo} caixas={cadastros.caixas} formas={cadastros.formas} titulos={titulos} podePagar={podePagar} onFechar={() => setAcao(null)}
+        <LancamentoModal natureza={natureza} titulo={acao.titulo} caixas={cadastros.caixas} formas={cadastros.formas} pessoas={cadastros.pessoas} titulos={titulos} podePagar={podePagar} onFechar={() => setAcao(null)}
+          onVinculos={() => setAcao({ tipo: "vinculos", titulo: acao.titulo })} onCadastrosMudaram={onCadastrosMudaram}
           onCancelar={() => setAcao({ tipo: "cancelar", titulo: acao.titulo })}
           onSalvo={async () => { await Promise.all([recarregar(), onCadastrosMudaram()]); }}
           onPagar={() => setAcao({ tipo: "pagar", titulo: acao.titulo })} onEstornar={() => setAcao({ tipo: "estornar", titulo: acao.titulo })} />
@@ -248,8 +262,9 @@ export function PagarModal({ natureza, titulo: t, caixas, pessoas, formas, titul
   const [erro, setErro] = useState("");
   const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
   const caixa = caixas.find((c) => String(c.id) === f.contaCaixaId);
-  const sugestao = ultimosDadosDaPessoa(titulos, t);
   const fornecedor = pessoas.find((p) => p.id === t.pessoa_id);
+  const sugestao = ultimosDadosDaPessoa(titulos, t, fornecedor);
+  const guardar = useGuardarPessoa(fornecedor, dados);
 
   const juros = valorCampo(f.juros), multa = valorCampo(f.multa), desconto = valorCampo(f.desconto);
   const totalCent = paraCentavos(Number(t.valor)) + paraCentavos(juros) + paraCentavos(multa) - paraCentavos(desconto);
@@ -327,7 +342,7 @@ export function PagarModal({ natureza, titulo: t, caixas, pessoas, formas, titul
         <button type="submit" hidden />
       </form>
       <h3 className="section-title">{T.dados}</h3>
-      <CamposPagamento formas={formas} valor={dados} onChange={setDados} prefixo="pg" sugestao={sugestao} rotuloForma={receber ? "Forma de recebimento" : "Forma de pagamento"} />
+      <CamposPagamento formas={formas} valor={dados} onChange={setDados} prefixo="pg" sugestao={sugestao} guardar={guardar} rotuloForma={receber ? "Forma de recebimento" : "Forma de pagamento"} />
       <h3 className="section-title">Comprovante</h3>
       <EscolherComprovantes arquivos={arquivos} onChange={setArquivos} />
       <div className="totais" style={{ maxWidth: "none" }}>
@@ -371,7 +386,7 @@ export function EstornoModal({ natureza = "pagar", descricao, pagamentoId, onFec
 }
 
 // Lançamento (título a pagar): dados da nota, vencimento e dados de pagamento, e o histórico de pagamentos.
-function LancamentoModal({ natureza, titulo: t, caixas, formas, titulos, podePagar, onFechar, onSalvo, onPagar, onEstornar, onCancelar }) {
+function LancamentoModal({ natureza, titulo: t, caixas, formas, pessoas, titulos, podePagar, onFechar, onSalvo, onPagar, onEstornar, onCancelar, onVinculos, onCadastrosMudaram }) {
   const T = TEXTOS[natureza];
   const receber = natureza === "receber";
   const editavel = podePagar && t.status === "aberto";
@@ -384,6 +399,8 @@ function LancamentoModal({ natureza, titulo: t, caixas, formas, titulos, podePag
   const set = (k) => (e) => { setOk(false); setF((p) => ({ ...p, [k]: e.target.value })); };
   const sit = situacaoTitulo(t, hojeISO(), natureza);
   const erroLinha = erroLinhaDigitavel(dados.linha_digitavel);
+  const pessoa = (pessoas || []).find((p) => p.id === t.pessoa_id);
+  const guardar = useGuardarPessoa(editavel ? pessoa : null, dados, onCadastrosMudaram);
 
   useEffect(() => {
     let ativo = true;
@@ -414,6 +431,7 @@ function LancamentoModal({ natureza, titulo: t, caixas, formas, titulos, podePag
         {podePagar && t.status === "pago" && t.pagamento_id && <button className="btn btn-ghost" style={{ marginRight: "auto", color: "var(--danger)", borderColor: "var(--danger-border)" }} onClick={onEstornar}>Estornar {T.baixa.toLowerCase()}</button>}
         {podePagar && (receber || !t.documento_id) && t.status === "aberto" && <button className="btn btn-ghost" style={{ marginRight: "auto", color: "var(--danger)", borderColor: "var(--danger-border)" }} onClick={onCancelar}>Cancelar parcela</button>}
         {ok && <span className="pill pill-ok">Salvo</span>}
+        <button className="btn btn-ghost" onClick={onVinculos} disabled={salvando} title="Ver a nota, as outras parcelas e a contabilidade deste lançamento"><Icone nome="vinculo" tamanho={15} /> Vínculos</button>
         <button className="btn btn-ghost" onClick={onFechar} disabled={salvando}>Fechar</button>
         {editavel && <button className="btn btn-ghost" style={{ borderColor: "var(--primary)", color: "var(--primary-hover)" }} onClick={salvar} disabled={salvando}>{salvando ? "Salvando..." : "Salvar"}</button>}
         {editavel && <button className="btn btn-primary" onClick={onPagar} disabled={salvando}>{T.acao}</button>}
@@ -434,7 +452,7 @@ function LancamentoModal({ natureza, titulo: t, caixas, formas, titulos, podePag
               <input id="lc-venc" type="date" style={inp} value={f.vencimento} onChange={set("vencimento")} />
             </div>
           </div>
-          <CamposPagamento formas={formas} valor={dados} onChange={(d) => { setOk(false); setDados(d); }} prefixo="lc" sugestao={ultimosDadosDaPessoa(titulos, t)} />
+          <CamposPagamento formas={formas} valor={dados} onChange={(d) => { setOk(false); setDados(d); }} prefixo="lc" sugestao={ultimosDadosDaPessoa(titulos, t, pessoa)} guardar={guardar} />
           <label style={lbl} htmlFor="lc-obs">Observação</label>
           <textarea id="lc-obs" style={{ ...inp, minHeight: 56, resize: "vertical", fontFamily: "inherit" }} maxLength={500} value={f.observacao} onChange={set("observacao")} placeholder={receber ? "Ex.: cobrar por WhatsApp, contrato assinado em 10/01" : "Ex.: boleto enviado por e-mail, falar com o financeiro do fornecedor"} />
         </>

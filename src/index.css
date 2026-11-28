@@ -650,3 +650,13 @@ input:disabled, select:disabled, textarea:disabled {
   .pdv-carrinho { position: static; }
   .pdv-pag-linha { grid-template-columns: 1fr 1fr; }
 }
+
+/* Vínculos nota ↔ financeiro ↔ contabilidade (v29) */
+.vinc-resumos { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-bottom: 10px; }
+.vinc-resumo { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); font-size: 12.5px; color: var(--text-2); }
+.vinc-resumo strong { font-size: 17px; color: var(--text); }
+.vinc-lanc { margin-bottom: 12px; padding: 8px 12px 10px; border: 1px solid var(--border); border-radius: 10px; }
+.vinc-lanc-topo { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 13px; margin-bottom: 4px; }
+/* Ícone ao lado de .btn-sm na mesma linha: mesma altura (gosto do usuário: vizinhos alinhados) */
+.btn-icone { width: 28px; height: 28px; padding: 0; vertical-align: middle; margin-right: 4px; }
+td.acoes .btn-sm { height: 28px; vertical-align: middle; display: inline-flex; align-items: center; }

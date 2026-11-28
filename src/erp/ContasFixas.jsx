@@ -276,7 +276,7 @@ function ContaFixaForm({ conta, cadastros, onFechar, onSalvo, onCadastrosMudaram
       </form>
       {erro && <div className="alert alert-danger" role="alert" style={{ marginTop: 16 }}><Icone nome="alerta" tamanho={16} /><span>{erro}</span></div>}
       {novaPessoa && (
-        <PessoaModal papelPadrao={pagar ? "fornecedor" : "cliente"} onFechar={() => setNovaPessoa(false)}
+        <PessoaModal papelPadrao={pagar ? "fornecedor" : "cliente"} formas={cadastros.formas} onFechar={() => setNovaPessoa(false)}
           onSalvo={(p) => { setNovaPessoa(false); setPessoasExtras((l) => [...l, p]); setF((x) => ({ ...x, pessoaId: String(p.id) })); onCadastrosMudaram(); }} />
       )}
     </Modal>

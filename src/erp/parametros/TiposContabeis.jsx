@@ -22,6 +22,7 @@ export default function TiposContabeis({ cadastros, onCadastrosMudaram }) {
   // Colunas dependem do plano de contas (para ordenar pelo código da conta, não pelo id).
   const colunas = useMemo(() => ({
     nome: (t) => t.nome,
+    recupera: (t) => listaTributos(t).length,
     debito: (t) => conta.get(t.conta_debito_id)?.codigo,
     credito: (t) => conta.get(t.conta_credito_id)?.codigo,
     descricao: (t) => t.descricao,
@@ -47,6 +48,7 @@ export default function TiposContabeis({ cadastros, onCadastrosMudaram }) {
         <table className="table">
           <thead><tr>
             <ThOrdenavel chave="nome" ordenacao={ordenacao}>Tipo</ThOrdenavel>
+            <ThOrdenavel chave="recupera" ordenacao={ordenacao}>Tributos a recuperar</ThOrdenavel>
             <ThOrdenavel chave="debito" ordenacao={ordenacao}>Conta de débito</ThOrdenavel>
             <ThOrdenavel chave="credito" ordenacao={ordenacao}>Conta de crédito</ThOrdenavel>
             <ThOrdenavel chave="descricao" ordenacao={ordenacao}>Descrição</ThOrdenavel>
@@ -54,13 +56,18 @@ export default function TiposContabeis({ cadastros, onCadastrosMudaram }) {
             <th className="acoes"><span className="sr-only">Ações</span></th>
           </tr></thead>
           <tbody>
-            {ordenacao.ordenadas.length === 0 && <tr><td className="vazio" colSpan={6}>Nenhum tipo contábil encontrado.</td></tr>}
+            {ordenacao.ordenadas.length === 0 && <tr><td className="vazio" colSpan={7}>Nenhum tipo contábil encontrado.</td></tr>}
             {ordenacao.ordenadas.map((t) => (
               <tr key={t.id} style={!t.ativo ? { color: "var(--faint)" } : undefined}>
                 <td style={{ fontWeight: 550 }}>{t.nome}</td>
+                <td style={{ textAlign: "center" }} title={listaTributos(t).length ? `Contabiliza a recuperar: ${listaTributos(t).join(", ")}` : "Não contabiliza tributos a recuperar"}>
+                  <input type="checkbox" checked={listaTributos(t).length > 0} readOnly tabIndex={-1} style={{ pointerEvents: "none", accentColor: "var(--primary)" }}
+                    aria-label={listaTributos(t).length ? `Contabiliza tributos a recuperar: ${listaTributos(t).join(", ")}` : "Não contabiliza tributos a recuperar"} />
+                  {listaTributos(t).length > 0 && <div style={{ fontSize: 11.5, color: "var(--text-2)" }}>{listaTributos(t).join(", ")}</div>}
+                </td>
                 <td>{rotuloConta(conta.get(t.conta_debito_id))}</td>
                 <td>{rotuloConta(conta.get(t.conta_credito_id))}</td>
-                <td className="truncate muted">{t.descricao}{listaTributos(t).length > 0 && <div style={{ fontSize: 12, color: "var(--text-2)" }}>Recupera {listaTributos(t).join(", ")}</div>}</td>
+                <td className="truncate muted">{t.descricao}</td>
                 <td><Situacao ativo={t.ativo} /></td>
                 <td className="acoes"><BotaoEditar rotulo={t.nome} onClick={() => setEditando(t)} /></td>
               </tr>

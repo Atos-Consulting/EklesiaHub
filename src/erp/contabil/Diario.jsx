@@ -11,6 +11,12 @@ import { formatarData, hojeISO, lerNumero, paraCentavos, deCentavos } from "../f
 import { ORIGENS, moeda } from "./calculoContabil";
 import { Pendencias, ContaSelect, Periodo } from "./comum";
 import { useContabilizar, periodoValido } from "./useContabilizar";
+import Vinculos from "../Vinculos";
+
+// Origens que têm nota e/ou lançamento do Financeiro para mostrar em Vínculos (v29).
+const COM_VINCULOS = ["nota", "titulo_pagar", "titulo_receber", "pagamento"];
+// As demais abrem a tela de origem.
+const ROTA_ORIGEM = { entrada: "#/financeiro/entradas", movimento: "#/financeiro/caixa/extrato", caixa_pdv: "#/comercial/caixas", estoque: "#/comercial/produtos", abertura: "#/parametros/caixas" };
 
 // Contábil → Lançamentos (diário). Os automáticos vêm do resto do sistema (notas, pagamentos, dízimos e ofertas,
 // contas a receber, movimentos de caixa e saldo inicial das contas); o manual serve para ajustes do contador.
@@ -23,8 +29,9 @@ const COLUNAS = {
   valor: (l) => l.valor,
 };
 
-function DetalheModal({ lanc, podeEstornar, onFechar, onMudou }) {
+function DetalheModal({ lanc, podeEstornar, caixas, onFechar, onMudou }) {
   const [motivo, setMotivo] = useState("");
+  const [verVinculos, setVerVinculos] = useState(false);
   const [estornando, setEstornando] = useState(false);
   const [erro, setErro] = useState("");
   const manualAtivo = lanc.origem === "manual" && !lanc.estorno_de && !lanc.estornado;
@@ -37,7 +44,15 @@ function DetalheModal({ lanc, podeEstornar, onFechar, onMudou }) {
   return (
     <Modal titulo={`Lançamento nº ${lanc.id}`} largura={760} onFechar={onFechar}
       extra={lanc.estornado ? <Pill tone="danger">Estornado</Pill> : lanc.estorno_de ? <Pill tone="warn">Estorno do nº {lanc.estorno_de}</Pill> : null}
-      rodape={<button className="btn btn-ghost" onClick={onFechar}>Fechar</button>}>
+      rodape={<>
+        {COM_VINCULOS.includes(lanc.origem) && (
+          <button className="btn btn-ghost" style={{ marginRight: "auto" }} onClick={() => setVerVinculos(true)} title="Ver a nota e os lançamentos do Financeiro que geraram este lançamento">
+            <Icone nome="vinculo" tamanho={15} /> {lanc.origem === "nota" ? "Ver nota e financeiro" : "Ver financeiro e nota"}
+          </button>
+        )}
+        {ROTA_ORIGEM[lanc.origem] && <a className="btn btn-ghost" style={{ marginRight: "auto" }} href={ROTA_ORIGEM[lanc.origem]}><Icone nome="externo" tamanho={14} /> Abrir a origem</a>}
+        <button className="btn btn-ghost" onClick={onFechar}>Fechar</button>
+      </>}>
       <div className="resumo-pagar" style={{ marginTop: 0 }}>
         <span>Data: <strong>{formatarData(lanc.data)}</strong>{lanc.data_competencia !== lanc.data ? <> (competência {formatarData(lanc.data_competencia)})</> : null}</span>
         <span>Origem: <strong>{ORIGENS[lanc.origem] ?? lanc.origem}</strong></span>
@@ -77,6 +92,7 @@ function DetalheModal({ lanc, podeEstornar, onFechar, onMudou }) {
         </div>
       )}
       {erro && <div className="alert alert-danger" role="alert" style={{ marginTop: 12 }}><Icone nome="alerta" tamanho={16} /><span>{erro}</span></div>}
+      {verVinculos && <Vinculos origem={{ tipo: "contabil", id: lanc.id, origem: lanc.origem, origem_id: lanc.origem_id }} caixas={caixas} onFechar={() => setVerVinculos(false)} />}
     </Modal>
   );
 }
@@ -245,7 +261,7 @@ export default function Diario({ cadastros, podeLancar, podeConfigurar }) {
         {filtrados.length > 0 && <div className="table-footer"><span>{filtrados.length} lançamento(s)</span><span>Total movimentado: <strong>{moeda(total)}</strong></span></div>}
       </div>
 
-      {aberto && <DetalheModal lanc={aberto} podeEstornar={podeLancar} onFechar={() => setAberto(null)} onMudou={() => setGatilho((g) => g + 1)} />}
+      {aberto && <DetalheModal lanc={aberto} podeEstornar={podeLancar} caixas={cadastros.caixas} onFechar={() => setAberto(null)} onMudou={() => setGatilho((g) => g + 1)} />}
       {novo && <NovoLancamento cadastros={cadastros} onFechar={() => setNovo(false)} onSalvo={() => { setNovo(false); setGatilho((g) => g + 1); }} />}
     </div>
   );

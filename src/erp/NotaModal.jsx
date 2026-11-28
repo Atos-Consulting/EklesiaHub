@@ -4,6 +4,7 @@ import { lbl, inp, msgErro } from "../estilos";
 import Icone from "./Icone";
 import Modal from "./Modal";
 import PessoaModal from "./PessoaModal";
+import Vinculos from "./Vinculos";
 import { TributosNota, TributosItem } from "./TributosCampos";
 import { CondicaoForm } from "./parametros/CondicoesPagamento";
 import { TIPOS_CONDICAO, nomeForma, resumoCondicao, gerarParcelas, centavosRetencoes, situacaoTitulo } from "./financeiro";
@@ -63,6 +64,7 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
   });
   const [itens, setItens] = useState(() => [itemVazio()]);
   const [titulos, setTitulos] = useState([]); // parcelas geradas no Financeiro (nota aprovada/cancelada)
+  const [verVinculos, setVerVinculos] = useState(false);
   const [novaCondicao, setNovaCondicao] = useState(false);
   const [anexos, setAnexos] = useState([]);
   const [pendentes, setPendentes] = useState([]);
@@ -371,6 +373,11 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
       )}
       {editavel && !podeAprovar && (
         <span className="muted" style={{ fontSize: 12.5, marginRight: "auto" }}>A aprovação é feita por um Supervisor ou Administrador.</span>
+      )}
+      {!novo && status !== "rascunho" && (
+        <button onClick={() => setVerVinculos(true)} disabled={ocupadoQualquer} className="btn btn-ghost" title="Parcelas no Financeiro (pago e a pagar) e lançamentos contábeis desta nota">
+          <Icone nome="vinculo" tamanho={15} /> Financeiro e contabilidade
+        </button>
       )}
       <button onClick={onFechar} disabled={Boolean(ocupado)} className="btn btn-ghost">{editavel ? "Cancelar" : "Fechar"}</button>
       {editavel && (
@@ -704,7 +711,8 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
         </>
       )}
 
-      {novoFornecedor && <PessoaModal onSalvo={aoSalvarFornecedor} onFechar={() => setNovoFornecedor(false)} />}
+      {verVinculos && <Vinculos origem={{ tipo: "nota", id: notaId }} caixas={cadastros.caixas} comContabilidade={usaContabilidade(cadastros.parametros)} onFechar={() => setVerVinculos(false)} />}
+      {novoFornecedor && <PessoaModal formas={cadastros.formas} onSalvo={aoSalvarFornecedor} onFechar={() => setNovoFornecedor(false)} />}
       {novaCondicao && <CondicaoForm condicao={null} formas={cadastros.formas} onSalvo={aoSalvarCondicao} onFechar={() => setNovaCondicao(false)} />}
 
       {confirmacao === "aprovar" && (
