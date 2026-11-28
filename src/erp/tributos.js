@@ -33,6 +33,8 @@ export const GRUPOS_TRIBUTOS_NOTA = [
     { chave: "inss", rotulo: "INSS retido", retencao: true },
     { chave: "irrf", rotulo: "IRRF retido", retencao: true },
     { chave: "csll", rotulo: "CSLL retida", retencao: true },
+    { chave: "pis_retido", rotulo: "PIS retido", retencao: true },
+    { chave: "cofins_retido", rotulo: "COFINS retida", retencao: true },
     { chave: "outras_retencoes", rotulo: "Outras retenções", retencao: true },
   ] },
   { titulo: "Outras informações", campos: [{ chave: "total_tributos", rotulo: "Total aproximado de tributos (Lei 12.741)" }], textos: [{ chave: "protocolo", rotulo: "Protocolo de autorização" }] },

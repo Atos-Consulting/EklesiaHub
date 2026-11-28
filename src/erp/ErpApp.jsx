@@ -17,6 +17,7 @@ import Orcamento from "./Orcamento";
 import FechamentoMes from "./FechamentoMes";
 import Diario from "./contabil/Diario";
 import { Razao, Balancete, Dre, Balanco } from "./contabil/Relatorios";
+import Retencoes from "./contabil/Retencoes";
 import InformeAnual from "./InformeAnual";
 import Logs from "./Logs";
 import Fornecedores from "./Fornecedores";
@@ -43,7 +44,7 @@ const MODULOS = [
   { id: "financeiro", grupo: "Gestão", rotulo: "Financeiro", icone: "carteira", pronto: true,
     telas: [{ id: "painel", rotulo: "Painel" }, { id: "lancamentos", rotulo: "Lançamentos" }, { id: "entradas", rotulo: "Dízimos e ofertas" }, { id: "caixa", rotulo: "Caixa" }, { id: "orcamento", rotulo: "Orçamento" }] },
   { id: "contabil", grupo: "Gestão", rotulo: "Contábil", icone: "calculadora", pronto: true, contabil: true,
-    telas: [{ id: "lancamentos", rotulo: "Lançamentos" }, { id: "razao", rotulo: "Razão" }, { id: "balancete", rotulo: "Balancete" }, { id: "dre", rotulo: "DRE" }, { id: "balanco", rotulo: "Balanço" }] },
+    telas: [{ id: "lancamentos", rotulo: "Lançamentos" }, { id: "razao", rotulo: "Razão" }, { id: "balancete", rotulo: "Balancete" }, { id: "dre", rotulo: "DRE" }, { id: "balanco", rotulo: "Balanço" }, { id: "retencoes", rotulo: "Retenções" }] },
   { id: "comercial", grupo: "Gestão", rotulo: "Comercial", icone: "sacola", pronto: false,
     descricao: "Livraria, bazar e demais vendas.",
     previsto: ["Produtos e controle de estoque", "Vendas e ponto de venda (PDV)", "Compras via notas de entrada", "Custo das mercadorias vendidas"] },
@@ -221,6 +222,7 @@ export default function ErpApp({ perfil: perfilInicial, onSair, onEmpresaTrocada
       if (tela?.id === "balancete") return <Balancete {...p} />;
       if (tela?.id === "dre") return <Dre {...p} />;
       if (tela?.id === "balanco") return <Balanco {...p} />;
+      if (tela?.id === "retencoes") return <Retencoes perfil={perfil} />;
       return <Diario {...p} podeLancar={perm.pagar} />;
     }
     if (modulo.id === "financeiro") {

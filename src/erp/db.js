@@ -827,6 +827,32 @@ export async function salvarRegraContabil(chave, contaId) {
   if (error) throw error;
 }
 
+// ── Tributos retidos (v26) ──
+
+export async function listarGuiasTributos() {
+  const { data, error } = await supabase.from("tributos_guias").select("tributo, pessoa_id, dia_vencimento");
+  if (error) throw error;
+  return data;
+}
+
+export async function salvarGuiaTributo(tributo, pessoaId, dia) {
+  const { error } = await supabase.from("tributos_guias").upsert({ tributo, pessoa_id: pessoaId, dia_vencimento: dia }, { onConflict: "empresa_id,tributo" });
+  if (error) throw error;
+}
+
+// Retenções das notas do mês (mes: qualquer dia do mês) e as guias da competência.
+export async function carregarRetencoesMes(mes) {
+  const comp = `${mes.slice(0, 7)}-01`;
+  const [notas, guias] = await Promise.all([
+    supabase.rpc("retencoes_mes", { p_mes: comp }),
+    supabase.from("titulos_financeiros").select("id, tributo_retido, descricao, valor, vencimento, status")
+      .not("tributo_retido", "is", null).eq("competencia", comp).order("id"),
+  ]);
+  if (notas.error) throw notas.error;
+  if (guias.error) throw guias.error;
+  return { notas: notas.data, guias: guias.data };
+}
+
 // ── Exportação para o contador (Excel) ──
 // Tudo do período: extrato (todas as contas), pagamentos e recebimentos válidos (com os dados do lançamento),
 // entradas e movimentos não estornados, e os saldos de cada conta antes e no fim do período.

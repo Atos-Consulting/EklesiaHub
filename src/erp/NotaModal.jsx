@@ -132,8 +132,7 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
   const centIpi = cent(form.fiscal.ipi);
   const centSt = cent(form.fiscal.icms_st);
   const totalCent = centItens + cent(form.frete) + cent(form.seguro) + cent(form.outras) - cent(form.desconto) + centIpi + centSt;
-  const centRetencoes = cent(form.fiscal.inss) + cent(form.fiscal.irrf) + cent(form.fiscal.csll) + cent(form.fiscal.outras_retencoes)
-    + (form.fiscal.iss_retido === true ? cent(form.fiscal.iss) : 0);
+  const centRetencoes = centavosRetencoes(form.fiscal);
   const centLiquido = totalCent - centavosRetencoes(form.fiscal);
   const previa = gerarParcelas(condicao, { emissao: form.dataEmissao, entrada: form.dataEntrada, centavos: centLiquido });
 
@@ -691,6 +690,7 @@ export default function NotaModal({ notaId, cadastros, podeEditar, podeAprovar, 
             {condicao?.tipo === "a_vista"
               ? <>O valor de <strong>{formatarMoeda(deCentavos(centLiquido))}</strong> sairá agora da conta caixa <strong>{caixaSelecionada?.nome}</strong>.</>
               : <>Serão geradas <strong>{previa.length} parcela(s)</strong> somando <strong>{formatarMoeda(deCentavos(centLiquido))}</strong> em Contas a pagar; o dinheiro sai da conta caixa quando cada parcela for paga.</>}
+            {centRetencoes > 0 && <> As retenções (<strong>{formatarMoeda(deCentavos(centRetencoes))}</strong>) entram nas guias a recolher do mês, em Contas a pagar.</>}
           </p>
           {avisosOrc.length > 0 && (
             <div className="orc-aviso" role="status">

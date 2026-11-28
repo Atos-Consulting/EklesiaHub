@@ -79,7 +79,7 @@ export function somarDias(iso, dias) {
 // Retenções que ficam com a igreja (para recolher ao governo): não são pagas ao fornecedor.
 export function centavosRetencoes(fiscal = {}) {
   const c = (k) => paraCentavos(Number.isFinite(lerNumero(fiscal[k])) ? lerNumero(fiscal[k]) : 0);
-  return c("inss") + c("irrf") + c("csll") + c("outras_retencoes") + (fiscal.iss_retido === true ? c("iss") : 0);
+  return c("inss") + c("irrf") + c("csll") + c("pis_retido") + c("cofins_retido") + c("outras_retencoes") + (fiscal.iss_retido === true ? c("iss") : 0); // = nota_retencoes() no banco (v26)
 }
 
 // Mesmo cálculo do banco: divide em centavos, a sobra vai para a 1ª parcela.
